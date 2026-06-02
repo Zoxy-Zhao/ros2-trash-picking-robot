@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ROS2 build artifacts
+install/
+log/
+build/
+
+# Model weights (use Git LFS or download separately)
+*.pt
+*.pth
+*.onnx
+*.engine
+*.npy
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# STM32CubeIDE
+.cproject
+.project
+.mxproject
+.settings/
+Debug/
+Release/
+*.launch
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+*.env.local
+venv/
+.venv/
+
+# Competition raw materials (too large for git)
+净境先锋-基于ROS2的智能垃圾拾取机器人/
+
+# Internal review notes (not for public)
+docs/code-review-issues.md
+
+# Large binary files
+*.mp4
+*.avi
+*.mov
+*.zip
+*.rar
+*.7z

@@ -1,0 +1,1628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>净境先锋智能控制系统 - 优化版</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --accent: #f093fb;
+            --success: #4facfe;
+            --warning: #ffeaa7;
+            --danger: #fd79a8;
+            --dark: #2d3748;
+            --light: #f7fafc;
+            --glass: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            --transition: all 0.3s ease;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', 'Microsoft YaHei', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+            color: white;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(147, 51, 234, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 80%, rgba(16, 185, 129, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .app-container {
+            min-height: 100vh;
+            position: relative;
+        }
+        
+        .page {
+            display: none;
+            min-height: 100vh;
+            padding: 20px;
+            animation: pageSlideIn 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        @keyframes pageSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .glass-card {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+        
+        .glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+        
+        /* 导航栏 */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--glass-border);
+            padding: 15px 0;
+            transition: var(--transition);
+        }
+        
+        .nav-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+        }
+        
+        .logo {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ffffff, #cbd5e1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .nav-btn {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: var(--transition);
+            backdrop-filter: blur(10px);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .nav-btn:hover, .nav-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        /* 主页面 */
+        .main-page {
+            padding-top: 100px;
+        }
+        
+        .hero-section {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+        
+        .hero-title {
+            font-size: clamp(2.5rem, 5vw, 3.5rem);
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff, #e2e8f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+            line-height: 1.2;
+        }
+        
+        @keyframes titleGlow {
+            from { filter: drop-shadow(0 0 20px rgba(240, 147, 251, 0.3)); }
+            to { filter: drop-shadow(0 0 40px rgba(79, 172, 254, 0.5)); }
+        }
+        
+        .hero-subtitle {
+            font-size: clamp(1rem, 2.5vw, 1.3rem);
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            padding: 12px 25px;
+            border-radius: 50px;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .feature-card {
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: var(--transition);
+        }
+        
+        .feature-card:active {
+            transform: scale(0.98);
+        }
+        
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: block;
+            transition: var(--transition);
+        }
+        
+        .feature-card:hover .feature-icon {
+            transform: scale(1.1);
+        }
+        
+        .feature-title {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .feature-desc {
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.6;
+        }
+        
+        /* 子页面通用样式 */
+        .sub-page {
+            padding-top: 100px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 40px;
+        }
+        
+        .back-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 12px 15px;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: var(--transition);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateX(-3px);
+        }
+        
+        .page-title {
+            font-size: clamp(1.8rem, 4vw, 2.5rem);
+            font-weight: 700;
+            color: white;
+        }
+        
+        /* 控制面板页面 */
+        .control-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .control-section {
+            padding: 25px;
+        }
+        
+        .section-title {
+            color: white;
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .mode-toggle {
+            display: flex;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 5px;
+            margin-bottom: 25px;
+        }
+        
+        .mode-btn {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: var(--transition);
+            color: rgba(255, 255, 255, 0.7);
+            font-weight: 600;
+        }
+        
+        .mode-btn.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+        
+        .direction-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 10px;
+            aspect-ratio: 1;
+            max-width: 280px;
+            margin: 0 auto;
+        }
+        
+        .dir-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+            font-size: 1.5rem;
+            aspect-ratio: 1;
+        }
+        
+        .dir-btn:hover:not(.disabled) {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: var(--primary);
+            transform: scale(1.05);
+        }
+        
+        .dir-btn:active:not(.disabled) {
+            transform: scale(0.95);
+        }
+        
+        .dir-btn.disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        
+        .dir-btn.stop {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: var(--danger);
+        }
+        
+        .dir-btn.stop:hover:not(.disabled) {
+            background: rgba(239, 68, 68, 0.25);
+        }
+        
+        .speed-control {
+            margin-top: 25px;
+        }
+        
+        .speed-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .speed-value {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--primary);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            min-width: 60px;
+            text-align: center;
+        }
+        
+        .speed-slider {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 5px;
+            outline: none;
+            transition: var(--transition);
+        }
+        
+        .speed-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+            transition: var(--transition);
+        }
+        
+        .speed-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        
+        .function-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 25px;
+        }
+        
+        .bin-function-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 25px;
+        }
+        
+        .func-btn {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: var(--transition);
+            text-align: center;
+            font-weight: 600;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .func-btn:hover {
+            background: rgba(16, 185, 129, 0.25);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+        }
+        
+        .func-btn:active {
+            transform: translateY(0);
+        }
+        
+        .bin-btn {
+            background: rgba(251, 191, 36, 0.15);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: var(--transition);
+            text-align: center;
+            font-weight: 600;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .bin-btn:hover {
+            background: rgba(251, 191, 36, 0.25);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.2);
+        }
+        
+        .bin-btn:active {
+            transform: translateY(0);
+        }
+        
+        /* 状态监控页面 */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .status-card {
+            padding: 25px;
+        }
+        
+        .card-title {
+            color: white;
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-items {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .status-item {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            transition: var(--transition);
+        }
+        
+        .status-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .status-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+        
+        .status-value {
+            color: white;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+        
+        .status-good { color: var(--success); }
+        .status-warning { color: var(--warning); }
+        .status-danger { color: var(--danger); }
+        
+        /* 系统信息页面 */
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        
+        .info-section {
+            padding: 25px;
+        }
+        
+        .info-items {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .info-item {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: var(--transition);
+        }
+        
+        .info-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .info-label {
+            color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .info-value {
+            color: white;
+            font-weight: 600;
+        }
+        
+        .log-container {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            gap: 15px;
+            font-size: 0.9rem;
+            transition: var(--transition);
+        }
+        
+        .log-entry:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+        
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        
+        .log-time {
+            color: rgba(255, 255, 255, 0.6);
+            min-width: 70px;
+        }
+        
+        .log-message {
+            color: rgba(255, 255, 255, 0.9);
+            flex: 1;
+        }
+        
+        /* 视频监控页面 */
+        .video-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .video-placeholder {
+            background: linear-gradient(45deg, rgba(79, 172, 254, 0.1), rgba(240, 147, 251, 0.1));
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            padding: 60px 30px;
+            min-height: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+        
+        .video-placeholder:hover {
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .video-icon {
+            font-size: 4rem;
+            color: rgba(255, 255, 255, 0.4);
+            margin-bottom: 20px;
+        }
+        
+        .video-text {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+        
+        .video-controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .video-btn {
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: var(--transition);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .video-btn:hover {
+            background: rgba(59, 130, 246, 0.25);
+            transform: translateY(-2px);
+        }
+        
+        .video-btn:active {
+            transform: translateY(0);
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 968px) {
+            .control-grid,
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .direction-pad {
+                max-width: 240px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 2.5rem;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .nav-content {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .nav-buttons {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .bin-function-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .status-items {
+                grid-template-columns: 1fr;
+            }
+            
+            .video-controls {
+                flex-direction: column;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .page {
+                padding: 15px;
+            }
+            
+            .main-page {
+                padding-top: 120px;
+            }
+            
+            .sub-page {
+                padding-top: 120px;
+            }
+            
+            .feature-card {
+                padding: 20px;
+            }
+            
+            .control-section {
+                padding: 20px;
+            }
+            
+            .section-title {
+                font-size: 1.1rem;
+            }
+            
+            .function-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--secondary);
+        }
+
+        /* 新增通知样式 */
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(16, 185, 129, 0.9);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-weight: 600;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            z-index: 2000;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.4s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .notification.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        
+        .notification.error {
+            background: rgba(239, 68, 68, 0.9);
+        }
+        
+        .notification.warning {
+            background: rgba(245, 158, 11, 0.9);
+        }
+        
+        /* 加载动画 */
+        .loader {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* 页面加载动画 */
+        .page-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--dark);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+        
+        .page-loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .loading-logo {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #ffffff, #cbd5e1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .loading-progress {
+            width: 200px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        
+        .loading-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            transition: width 0.4s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-loading" id="pageLoading">
+        <div class="loading-logo">
+            <i class="fas fa-robot"></i>
+            净境先锋
+        </div>
+        <div class="loader"></div>
+        <div class="loading-progress">
+            <div class="loading-progress-bar" id="loadingProgress"></div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- 导航栏 -->
+        <nav class="navbar">
+            <div class="nav-content">
+                <div class="logo">
+                    <i class="fas fa-robot"></i>
+                    净境先锋
+                </div>
+                <div class="nav-buttons">
+                    <button class="nav-btn active" data-page="main">
+                        <i class="fas fa-home"></i> <span class="nav-text">主页</span>
+                    </button>
+                    <button class="nav-btn" data-page="control">
+                        <i class="fas fa-gamepad"></i> <span class="nav-text">控制</span>
+                    </button>
+                    <button class="nav-btn" data-page="status">
+                        <i class="fas fa-chart-line"></i> <span class="nav-text">状态</span>
+                    </button>
+                    <button class="nav-btn" data-page="video">
+                        <i class="fas fa-video"></i> <span class="nav-text">监控</span>
+                    </button>
+                    <button class="nav-btn" data-page="system">
+                        <i class="fas fa-cog"></i> <span class="nav-text">系统</span>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 主页面 -->
+        <div id="main" class="page active main-page">
+            <div class="hero-section">
+                <h1 class="hero-title">净境先锋</h1>
+                <p class="hero-subtitle">智能垃圾收集机器人控制系统</p>
+                <div class="status-badge">
+                    <div class="status-dot"></div>
+                    系统运行正常
+                </div>
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-card glass-card" data-page="control">
+                    <i class="fas fa-gamepad feature-icon"></i>
+                    <h3 class="feature-title">智能控制</h3>
+                    <p class="feature-desc">手动控制机器人移动，支持多种驾驶模式和速度调节</p>
+                </div>
+                
+                <div class="feature-card glass-card" data-page="status">
+                    <i class="fas fa-chart-line feature-icon"></i>
+                    <h3 class="feature-title">状态监控</h3>
+                    <p class="feature-desc">实时监控电池状态、垃圾收集情况和车辆运行状态</p>
+                </div>
+                
+                <div class="feature-card glass-card" data-page="video">
+                    <i class="fas fa-video feature-icon"></i>
+                    <h3 class="feature-title">视频监控</h3>
+                    <p class="feature-desc">实时视频流，远程查看机器人工作环境和状态</p>
+                </div>
+                
+                <div class="feature-card glass-card" data-page="system">
+                    <i class="fas fa-microchip feature-icon"></i>
+                    <h3 class="feature-title">系统信息</h3>
+                    <p class="feature-desc">查看系统版本、运行参数和操作日志</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 控制页面 -->
+        <div id="control" class="page sub-page">
+            <div class="page-header">
+                <button class="back-btn" data-page="main">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <h2 class="page-title">智能控制中心</h2>
+            </div>
+            
+            <div class="control-grid">
+                <div class="glass-card control-section">
+                    <div class="section-title">
+                        <i class="fas fa-toggle-on"></i>
+                        控制模式
+                    </div>
+                    
+                    <div class="mode-toggle">
+                        <div class="mode-btn" id="auto-mode">自动模式</div>
+                        <div class="mode-btn active" id="manual-mode">手动控制</div>
+                    </div>
+                    
+                    <div class="section-title">
+                        <i class="fas fa-arrows-alt"></i>
+                        方向控制
+                    </div>
+                    
+                    <div class="direction-pad">
+                        <div></div>
+                        <div class="dir-btn" onclick="sendCommand('forward')">
+                            <i class="fas fa-arrow-up"></i>
+                            <span style="font-size: 0.8rem;">前进</span>
+                        </div>
+                        <div></div>
+                        <div class="dir-btn" onclick="sendCommand('left')">
+                            <i class="fas fa-arrow-left"></i>
+                            <span style="font-size: 0.8rem;">左转</span>
+                        </div>
+                        <div class="dir-btn stop" onclick="sendCommand('stop')">
+                            <i class="fas fa-stop"></i>
+                            <span style="font-size: 0.8rem;">停止</span>
+                        </div>
+                        <div class="dir-btn" onclick="sendCommand('right')">
+                            <i class="fas fa-arrow-right"></i>
+                            <span style="font-size: 0.8rem;">右转</span>
+                        </div>
+                        <div></div>
+                        <div class="dir-btn" onclick="sendCommand('backward')">
+                            <i class="fas fa-arrow-down"></i>
+                            <span style="font-size: 0.8rem;">后退</span>
+                        </div>
+                        <div></div>
+                    </div>
+                </div>
+                
+                <div class="glass-card control-section">
+                    <div class="section-title">
+                        <i class="fas fa-sliders-h"></i>
+                        高级控制
+                    </div>
+                    
+                    <div class="speed-control">
+                        <div class="speed-header">
+                            <span>速度控制</span>
+                            <div class="speed-value" id="speed-display">50%</div>
+                        </div>
+                        <input type="range" min="0" max="100" value="50" class="speed-slider" id="speed-slider">
+                    </div>
+                    
+                    <div class="function-grid">
+                        <div class="func-btn" onclick="sendCommand('clean')">
+                            <i class="fas fa-broom"></i> 清扫模式
+                        </div>
+                        <div class="func-btn" onclick="sendCommand('return')">
+                            <i class="fas fa-home"></i> 返回充电
+                        </div>
+                        <div class="func-btn" onclick="sendCommand('patrol')">
+                            <i class="fas fa-route"></i> 巡逻模式
+                        </div>
+                        <div class="func-btn" onclick="sendCommand('emergency')">
+                            <i class="fas fa-exclamation-triangle"></i> 紧急停止
+                        </div>
+                    </div>
+                    
+                    <div class="section-title" style="margin-top: 30px;">
+                        <i class="fas fa-trash-alt"></i>
+                        垃圾桶操作
+                    </div>
+                    
+                    <div class="bin-function-grid">
+                        <div class="bin-btn" onclick="sendCommand('change_left_bin')">
+                            <i class="fas fa-arrow-left"></i>
+                            换左桶
+                        </div>
+                        <div class="bin-btn" onclick="sendCommand('change_top_bin')">
+                            <i class="fas fa-arrow-up"></i>
+                            上桶
+                        </div>
+                        <div class="bin-btn" onclick="sendCommand('change_right_bin')">
+                            <i class="fas fa-arrow-right"></i>
+                            换右桶
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 状态监控页面 -->
+        <div id="status" class="page sub-page">
+            <div class="page-header">
+                <button class="back-btn" data-page="main">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <h2 class="page-title">状态监控中心</h2>
+            </div>
+            
+            <div class="status-grid">
+                <div class="glass-card status-card">
+                    <div class="card-title">
+                        <i class="fas fa-battery-three-quarters"></i>
+                        电源系统
+                    </div>
+                    <div class="status-items">
+                        <div class="status-item">
+                            <div class="status-label">电池电量</div>
+                            <div class="status-value status-good">78%</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">运行状态</div>
+                            <div class="status-value status-good">正常</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">充电状态</div>
+                            <div class="status-value status-good">未充电</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">预计续航</div>
+                            <div class="status-value status-good">4.5小时</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass-card status-card">
+                    <div class="card-title">
+                        <i class="fas fa-trash-alt"></i>
+                        垃圾收集
+                    </div>
+                    <div class="status-items">
+                        <div class="status-item">
+                            <div class="status-label">干垃圾桶</div>
+                            <div class="status-value status-good">45%</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">湿垃圾桶</div>
+                            <div class="status-value status-warning">65%</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">可回收桶</div>
+                            <div class="status-value status-good">30%</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">有害垃圾桶</div>
+                            <div class="status-value status-good">20%</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass-card status-card">
+                    <div class="card-title">
+                        <i class="fas fa-tachometer-alt"></i>
+                        运行状态
+                    </div>
+                    <div class="status-items">
+                        <div class="status-item">
+                            <div class="status-label">工作模式</div>
+                            <div class="status-value status-good">自动模式</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">运行状态</div>
+                            <div class="status-value status-good">正常</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">运行时间</div>
+                            <div class="status-value">2.5小时</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">清洁区域</div>
+                            <div class="status-value">A区走廊</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass-card status-card">
+                    <div class="card-title">
+                        <i class="fas fa-network-wired"></i>
+                        网络状态
+                    </div>
+                    <div class="status-items">
+                        <div class="status-item">
+                            <div class="status-label">连接状态</div>
+                            <div class="status-value status-good">稳定</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">信号强度</div>
+                            <div class="status-value status-good">-45dBm</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">上传速度</div>
+                            <div class="status-value">2.4Mbps</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">下载速度</div>
+                            <div class="status-value">5.7Mbps</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 视频监控页面 -->
+        <div id="video" class="page sub-page">
+            <div class="page-header">
+                <button class="back-btn" data-page="main">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <h2 class="page-title">视频监控中心</h2>
+            </div>
+            
+            <div class="video-container glass-card">
+                <div class="video-placeholder">
+                    <i class="fas fa-video video-icon"></i>
+                    <p class="video-text">视频监控功能已启用<br>实时查看机器人工作状态与环境</p>
+                    <div class="loader" style="margin-top: 20px;"></div>
+                </div>
+                
+                <div class="video-controls">
+                    <button class="video-btn">
+                        <i class="fas fa-play"></i> 开始直播
+                    </button>
+                    <button class="video-btn">
+                        <i class="fas fa-expand"></i> 全屏模式
+                    </button>
+                    <button class="video-btn">
+                        <i class="fas fa-camera"></i> 截图保存
+                    </button>
+                    <button class="video-btn">
+                        <i class="fas fa-video"></i> 切换摄像头
+                    </button>
+                </div>
+            </div>
+            
+            <div class="features-grid">
+                <div class="glass-card feature-card">
+                    <h3 class="feature-title">全局摄像头</h3>
+                    <p class="feature-desc">监控机器人整体工作环境</p>
+                </div>
+                
+                <div class="glass-card feature-card">
+                    <h3 class="feature-title">局部摄像头</h3>
+                    <p class="feature-desc">近距离观察机器人工作状态</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 系统信息页面 -->
+        <div id="system" class="page sub-page">
+            <div class="page-header">
+                <button class="back-btn" data-page="main">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <h2 class="page-title">系统信息中心</h2>
+            </div>
+            
+            <div class="info-grid">
+                <div class="glass-card info-section">
+                    <div class="section-title">
+                        <i class="fas fa-info-circle"></i>
+                        设备信息
+                    </div>
+                    
+                    <div class="info-items">
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="fas fa-microchip"></i>
+                                处理器
+                            </div>
+                            <div class="info-value">NVIDIA Orin</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="fas fa-memory"></i>
+                                内存
+                            </div>
+                            <div class="info-value">16GB LPDDR5</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="fas fa-hdd"></i>
+                                存储空间
+                            </div>
+                            <div class="info-value">512GB (剩余 420GB)</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="fas fa-microchip"></i>
+                                操作系统
+                            </div>
+                            <div class="info-value">RobotOS v2.4.1</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="fas fa-sync-alt"></i>
+                                系统更新时间
+                            </div>
+                            <div class="info-value">2025-07-25</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass-card info-section">
+                    <div class="section-title">
+                        <i class="fas fa-history"></i>
+                        操作日志
+                    </div>
+                    
+                    <div class="log-container" id="log-container">
+                        <!-- 日志将动态添加 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="notification" id="notification">
+        <i class="fas fa-check-circle"></i>
+        <span>命令已发送: 前进</span>
+    </div>
+    
+    <script>
+        // 全局日志数组，最多存储10条记录
+        let operationLogs = [
+            {time: "09:23:15", message: "系统启动完成，进入待机模式"},
+            {time: "09:45:30", message: "开始执行每日清洁任务"},
+            {time: "10:12:45", message: "检测到低电量(23%)，返回充电站"},
+            {time: "10:30:20", message: "开始充电，当前电量：23%"},
+            {time: "11:15:40", message: "充电完成，当前电量：100%"},
+            {time: "11:30:10", message: "恢复清洁任务"},
+            {time: "12:45:22", message: "垃圾箱容量达到80%，建议清理"},
+            {time: "13:20:15", message: "清洁任务完成，返回待机位置"}
+        ];
+
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 模拟页面加载进度
+            simulatePageLoad();
+            
+            // 初始化页面
+            initApp();
+        });
+
+        // 模拟页面加载
+        function simulatePageLoad() {
+            const loadingElem = document.getElementById('pageLoading');
+            const progressBar = document.getElementById('loadingProgress');
+            let progress = 0;
+            
+            const interval = setInterval(() => {
+                progress += Math.random() * 15;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    
+                    progressBar.style.width = '100%';
+                    
+                    setTimeout(() => {
+                        loadingElem.classList.add('hidden');
+                    }, 500);
+                } else {
+                    progressBar.style.width = progress + '%';
+                }
+            }, 200);
+        }
+
+        // 初始化应用
+        function initApp() {
+            // 初始化日志显示
+            updateLogDisplay();
+            
+            // 为导航按钮添加事件监听
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const pageId = this.getAttribute('data-page');
+                    showPage(pageId);
+                });
+            });
+            
+            // 为返回按钮添加事件监听
+            document.querySelectorAll('.back-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    showPage('main');
+                });
+            });
+            
+            // 为主页卡片添加事件监听
+            document.querySelectorAll('.feature-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    const pageId = this.getAttribute('data-page');
+                    showPage(pageId);
+                });
+            });
+            
+            // 速度滑块功能
+            const speedSlider = document.getElementById('speed-slider');
+            const speedDisplay = document.getElementById('speed-display');
+            
+            if (speedSlider && speedDisplay) {
+                speedSlider.addEventListener('input', function() {
+                    speedDisplay.textContent = `${this.value}%`;
+                    // 添加速度调整日志
+                    addLogEntry(`调整速度: ${this.value}%`);
+                });
+            }
+            
+            // 模式切换功能
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.mode-btn').forEach(b => {
+                        b.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    
+                    const notification = document.getElementById('notification');
+                    notification.innerHTML = `<i class="fas fa-sync-alt"></i><span>已切换到${this.textContent}</span>`;
+                    notification.classList.add('show');
+                    
+                    // 添加模式切换日志
+                    addLogEntry(`切换模式: ${this.textContent}`);
+                    
+                    setTimeout(() => {
+                        notification.classList.remove('show');
+                    }, 2000);
+                });
+            });
+            
+            // 方向按钮悬停效果
+            document.querySelectorAll('.dir-btn:not(.disabled)').forEach(btn => {
+                btn.addEventListener('mousedown', function() {
+                    this.style.transform = 'scale(0.95)';
+                });
+                
+                btn.addEventListener('mouseup', function() {
+                    this.style.transform = 'scale(1.05)';
+                });
+                
+                btn.addEventListener('mouseleave', function() {
+                    this.style.transform = '';
+                });
+            });
+            
+            // 键盘快捷键支持
+            initKeyboardShortcuts();
+        }
+
+        // 初始化键盘快捷键
+        function initKeyboardShortcuts() {
+            document.addEventListener('keydown', function(e) {
+                // 只有在控制页面才启用方向键
+                if (document.getElementById('control').classList.contains('active')) {
+                    switch(e.key) {
+                        case 'ArrowUp':
+                            sendCommand('forward');
+                            break;
+                        case 'ArrowDown':
+                            sendCommand('backward');
+                            break;
+                        case 'ArrowLeft':
+                            sendCommand('left');
+                            break;
+                        case 'ArrowRight':
+                            sendCommand('right');
+                            break;
+                        case ' ':
+                            sendCommand('stop');
+                            break;
+                    }
+                }
+                
+                // 全局快捷键
+                if (e.ctrlKey || e.metaKey) {
+                    switch(e.key) {
+                        case '1':
+                            e.preventDefault();
+                            showPage('main');
+                            break;
+                        case '2':
+                            e.preventDefault();
+                            showPage('control');
+                            break;
+                        case '3':
+                            e.preventDefault();
+                            showPage('status');
+                            break;
+                        case '4':
+                            e.preventDefault();
+                            showPage('video');
+                            break;
+                        case '5':
+                            e.preventDefault();
+                            showPage('system');
+                            break;
+                    }
+                }
+            });
+        }
+
+        // 页面切换功能
+        function showPage(pageId) {
+            // 隐藏所有页面
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            
+            // 显示目标页面
+            document.getElementById(pageId).classList.add('active');
+            
+            // 更新导航按钮状态
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // 激活当前页面对应的导航按钮
+            const currentNavBtn = document.querySelector(`.nav-btn[data-page="${pageId}"]`);
+            if (currentNavBtn) {
+                currentNavBtn.classList.add('active');
+            }
+            
+            // 添加页面切换日志
+            const pageNames = {
+                'main': '主页面',
+                'control': '控制中心',
+                'status': '状态监控',
+                'video': '视频监控',
+                'system': '系统信息'
+            };
+            addLogEntry(`切换到${pageNames[pageId]}`);
+        }
+        
+        // 添加操作日志
+        function addLogEntry(message) {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('zh-CN', { hour12: false });
+            
+            // 添加新日志到数组开头
+            operationLogs.unshift({
+                time: timeString,
+                message: message
+            });
+            
+            // 保持最多10条日志
+            if (operationLogs.length > 10) {
+                operationLogs.pop();
+            }
+            
+            // 更新日志显示
+            updateLogDisplay();
+        }
+        
+        // 更新日志显示
+        function updateLogDisplay() {
+            const logContainer = document.getElementById('log-container');
+            logContainer.innerHTML = '';
+            
+            operationLogs.forEach(log => {
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <div class="log-time">${log.time}</div>
+                    <div class="log-message">${log.message}</div>
+                `;
+                logContainer.appendChild(logEntry);
+            });
+        }
+        
+        // 控制面板功能
+        function sendCommand(command) {
+            const notification = document.getElementById('notification');
+            const commandText = getCommandText(command);
+            
+            // 设置通知图标
+            let icon = 'fa-check-circle';
+            if (command === 'emergency') {
+                icon = 'fa-exclamation-triangle';
+                notification.classList.add('warning');
+            } else {
+                notification.classList.remove('warning');
+            }
+            
+            notification.innerHTML = `<i class="fas ${icon}"></i><span>命令已发送: ${commandText}</span>`;
+            notification.classList.add('show');
+            
+            // 添加操作日志
+            addLogEntry(`执行命令: ${commandText}`);
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+            
+            console.log(`命令发送: ${command}`);
+            
+            // 模拟一些命令的特殊效果
+            if (command === 'emergency') {
+                // 紧急停止时闪烁效果
+                document.body.style.animation = 'flash 0.5s ease 2';
+                setTimeout(() => {
+                    document.body.style.animation = '';
+                }, 1000);
+            }
+        }
+        
+        function getCommandText(command) {
+            const commands = {
+                'forward': '前进',
+                'backward': '后退',
+                'left': '左转',
+                'right': '右转',
+                'stop': '停止',
+                'clean': '清扫模式',
+                'return': '返回充电',
+                'patrol': '巡逻模式',
+                'emergency': '紧急停止',
+                'change_left_bin': '换左桶',
+                'change_top_bin': '上桶',
+                'change_right_bin': '换右桶'
+            };
+            return commands[command] || command;
+        }
+
+        // 添加CSS动画
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes flash {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.7; }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
