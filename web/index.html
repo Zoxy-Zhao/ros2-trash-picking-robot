@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>净境先锋智能控制系统 - 优化版</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         :root {
             --primary: #667eea;
@@ -1102,7 +1103,7 @@
                     <div class="status-items">
                         <div class="status-item">
                             <div class="status-label">电池电量</div>
-                            <div class="status-value status-good">78%</div>
+                            <div class="status-value status-good" id="sv-battery">78%</div>
                         </div>
                         <div class="status-item">
                             <div class="status-label">运行状态</div>
@@ -1110,7 +1111,7 @@
                         </div>
                         <div class="status-item">
                             <div class="status-label">充电状态</div>
-                            <div class="status-value status-good">未充电</div>
+                            <div class="status-value status-good" id="sv-charging">未充电</div>
                         </div>
                         <div class="status-item">
                             <div class="status-label">预计续航</div>
@@ -1127,19 +1128,19 @@
                     <div class="status-items">
                         <div class="status-item">
                             <div class="status-label">干垃圾桶</div>
-                            <div class="status-value status-good">45%</div>
+                            <div class="status-value status-good" id="sv-bin-dry">45%</div>
                         </div>
                         <div class="status-item">
                             <div class="status-label">湿垃圾桶</div>
-                            <div class="status-value status-warning">65%</div>
+                            <div class="status-value status-warning" id="sv-bin-wet">65%</div>
                         </div>
                         <div class="status-item">
                             <div class="status-label">可回收桶</div>
-                            <div class="status-value status-good">30%</div>
+                            <div class="status-value status-good" id="sv-bin-rec">30%</div>
                         </div>
                         <div class="status-item">
                             <div class="status-label">有害垃圾桶</div>
-                            <div class="status-value status-good">20%</div>
+                            <div class="status-value status-good" id="sv-bin-haz">20%</div>
                         </div>
                     </div>
                 </div>
@@ -1152,7 +1153,7 @@
                     <div class="status-items">
                         <div class="status-item">
                             <div class="status-label">工作模式</div>
-                            <div class="status-value status-good">自动模式</div>
+                            <div class="status-value status-good" id="sv-mode">自动模式</div>
                         </div>
                         <div class="status-item">
                             <div class="status-label">运行状态</div>
@@ -1177,7 +1178,7 @@
                     <div class="status-items">
                         <div class="status-item">
                             <div class="status-label">连接状态</div>
-                            <div class="status-value status-good">稳定</div>
+                            <div class="status-value status-warning" id="sv-conn">未连接</div>
                         </div>
                         <div class="status-item">
                             <div class="status-label">信号强度</div>
@@ -1328,6 +1329,97 @@
             {time: "13:20:15", message: "清洁任务完成，返回待机位置"}
         ];
 
+        // ========== MQTT 物联网通信 ==========
+        // 默认连接 EMQX 公共测试服务器，便于直接演示；正式部署时改为自有 EMQX 地址
+        const MQTT_CONFIG = {
+            url: 'wss://broker.emqx.io:8084/mqtt',
+            options: {
+                clientId: 'jingjing_web_' + Math.random().toString(16).slice(2, 10),
+                keepalive: 60,
+                clean: true,
+                connectTimeout: 8000,
+                reconnectPeriod: 4000,
+            },
+            topicControl: 'jingjing/robot/control', // 下行：Web 控制中心 → 机器人
+            topicStatus: 'jingjing/robot/status',   // 上行：机器人 → Web 控制中心
+        };
+        let mqttClient = null;
+        let mqttConnected = false;
+
+        // 建立 MQTT over WebSocket 连接
+        function connectMQTT() {
+            if (typeof mqtt === 'undefined') {
+                console.warn('mqtt.js 未加载，跳过 MQTT 连接');
+                return;
+            }
+            updateConnState('connecting');
+            mqttClient = mqtt.connect(MQTT_CONFIG.url, MQTT_CONFIG.options);
+
+            mqttClient.on('connect', () => {
+                mqttConnected = true;
+                updateConnState('online');
+                mqttClient.subscribe(MQTT_CONFIG.topicStatus, (err) => {
+                    addLogEntry(err ? '状态订阅失败' : '已连接 MQTT 服务器，开始接收状态数据');
+                });
+            });
+
+            mqttClient.on('message', (topic, payload) => {
+                if (topic !== MQTT_CONFIG.topicStatus) return;
+                try {
+                    updateStatus(JSON.parse(payload.toString()));
+                } catch (e) {
+                    console.warn('状态数据解析失败:', e);
+                }
+            });
+
+            mqttClient.on('reconnect', () => updateConnState('connecting'));
+            mqttClient.on('close', () => { mqttConnected = false; updateConnState('offline'); });
+            mqttClient.on('error', (e) => { console.error('MQTT 错误:', e); });
+        }
+
+        // 更新「连接状态」显示
+        function updateConnState(state) {
+            const el = document.getElementById('sv-conn');
+            if (!el) return;
+            const map = {
+                online:     ['在线', 'status-good'],
+                connecting: ['连接中…', 'status-warning'],
+                offline:    ['离线', 'status-danger'],
+            };
+            const [text, cls] = map[state] || map.offline;
+            el.textContent = text;
+            el.className = 'status-value ' + cls;
+        }
+
+        // 根据机器人上报的状态 JSON 更新界面
+        // 期望格式: {battery:78, charging:false, mode:"自动模式",
+        //            bins:{dry:45, wet:65, recyclable:30, hazardous:20}}
+        function updateStatus(data) {
+            if (typeof data.battery === 'number')
+                setStatusValue('sv-battery', data.battery + '%', data.battery > 20);
+            if (typeof data.charging === 'boolean')
+                setStatusValue('sv-charging', data.charging ? '充电中' : '未充电', true);
+            if (data.mode)
+                setStatusValue('sv-mode', data.mode, true);
+            if (data.bins) {
+                const map = { dry: 'sv-bin-dry', wet: 'sv-bin-wet',
+                              recyclable: 'sv-bin-rec', hazardous: 'sv-bin-haz' };
+                for (const key in map) {
+                    if (typeof data.bins[key] === 'number')
+                        setStatusValue(map[key], data.bins[key] + '%', data.bins[key] < 80);
+                }
+            }
+            addLogEntry('收到机器人状态更新');
+        }
+
+        // 设置某个状态值并按「正常/警告」着色
+        function setStatusValue(id, text, isGood) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = text;
+            el.className = 'status-value ' + (isGood ? 'status-good' : 'status-warning');
+        }
+
         // 页面加载完成后执行
         document.addEventListener('DOMContentLoaded', function() {
             // 模拟页面加载进度
@@ -1364,6 +1456,9 @@
         function initApp() {
             // 初始化日志显示
             updateLogDisplay();
+
+            // 启动 MQTT 连接
+            connectMQTT();
             
             // 为导航按钮添加事件监听
             document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -1585,6 +1680,16 @@
             }, 3000);
             
             console.log(`命令发送: ${command}`);
+
+            // 通过 MQTT 发布控制指令到机器人
+            if (mqttConnected && mqttClient) {
+                mqttClient.publish(
+                    MQTT_CONFIG.topicControl,
+                    JSON.stringify({ command: command, ts: Date.now() })
+                );
+            } else {
+                addLogEntry('⚠️ 未连接 MQTT 服务器，指令未下发');
+            }
             
             // 模拟一些命令的特殊效果
             if (command === 'emergency') {
