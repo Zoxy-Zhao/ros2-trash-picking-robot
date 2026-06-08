@@ -13,10 +13,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='orin',
-    maintainer_email='orin@todo.todo',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    maintainer='zxy',
+    maintainer_email='zxy2016567076@gmail.com',
+    description='UART serial communication with the STM32 lower controller',
+    license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [

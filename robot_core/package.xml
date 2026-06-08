@@ -3,9 +3,9 @@
 <package format="3">
   <name>robot_core</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="orin@todo.todo">orin</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Main task scheduling and coordination node</description>
+  <maintainer email="zxy2016567076@gmail.com">zxy</maintainer>
+  <license>MIT</license>
 
   <depend>detection_subscriber</depend>
   <test_depend>ament_copyright</test_depend>

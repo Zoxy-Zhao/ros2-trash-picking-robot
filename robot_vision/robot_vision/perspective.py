@@ -13,15 +13,22 @@ CENTER_PIX = 200
 CENTER_REAL = 20.6
 BLOCK_R = 4.75
 
+
 class PerspectiveNode(Node):
     def __init__(self):
-        super().__init__('perspective_service')
+        super().__init__("perspective_service")
         self.srv = self.create_service(
-            Perspective, 
-            'perspective_service', 
-            self.perspective_callback
+            Perspective, "perspective_service", self.perspective_callback
         )
-        self.load_transform_matrix("/home/orin/WorkSpace/robot_ws/src/robot_vision/data/matrix.npy")
+        # 标定矩阵路径可通过 ROS2 参数 matrix_path 覆盖
+        self.declare_parameter(
+            "matrix_path",
+            os.path.expanduser("~/robot_ws/src/robot_vision/data/matrix.npy"),
+        )
+        self.matrix_path = (
+            self.get_parameter("matrix_path").get_parameter_value().string_value
+        )
+        self.load_transform_matrix(self.matrix_path)
 
         self.get_logger().info("透视变换服务已就绪")
 
@@ -34,7 +41,7 @@ class PerspectiveNode(Node):
             print(f"透视变换矩阵已从 {filename} 加载")
         except Exception as e:
             print(f"加载矩阵失败: {e}")
-    
+
     def transform_point(self, src_point, transform_matrix):
         """
         使用透视变换矩阵将单个坐标转换为透视变换后的坐标。
@@ -50,7 +57,7 @@ class PerspectiveNode(Node):
         y_prime = transformed_point[1] / transformed_point[2]
 
         return (x_prime, y_prime)
-    
+
     def to_axis(self, position):
         """通过平视摄像头的坐标来推算出物品的实际坐标(cm)"""
         # 坐标转换
@@ -64,7 +71,6 @@ class PerspectiveNode(Node):
 
         return (real_x, real_y)
 
-
     def perspective_callback(self, request, response):
         result = self.transform_point((request.x, request.y), self.transform_matrix)
         result = self.to_axis(result)
@@ -73,7 +79,8 @@ class PerspectiveNode(Node):
         self.get_logger().info(f"result: X:{result[0]}, Y:{result[1]}")
         response.success = True
         return response
-    
+
+
 def main(args=None):
     rclpy.init(args=args)
     node = PerspectiveNode()
@@ -82,7 +89,6 @@ def main(args=None):
 
 
 class PerspectiveTransforms:
-    
     def __init__(self):
         """
         初始化 PerspectiveCalibration 类的实例。
@@ -113,7 +119,9 @@ class PerspectiveTransforms:
         cv2.waitKey()
 
         # 查找轮廓
-        contours, _ = cv2.findContours(thresh_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(
+            thresh_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
 
         # 找到最大的轮廓（假设菱形是图像中最大的轮廓）
         max_contour = max(contours, key=cv2.contourArea)
@@ -171,7 +179,7 @@ class PerspectiveTransforms:
                 [width / 2 - SIZE, CENTER_PIX],
                 [width / 2, CENTER_PIX - SIZE],
                 [width / 2 + SIZE, CENTER_PIX],
-                [width / 2, CENTER_PIX + SIZE]
+                [width / 2, CENTER_PIX + SIZE],
             ]
 
             # 获取透视变换矩阵
@@ -181,7 +189,7 @@ class PerspectiveTransforms:
             dst = cv2.warpPerspective(frame, self.transform_matrix, (width, height))
 
             # 显示原始图像和透视变换后的图像
-            
+
             cv2.imshow("Warped", dst)
             cv2.waitKey(0)
         except ValueError as e:
@@ -189,39 +197,43 @@ class PerspectiveTransforms:
 
         # 关闭所有窗口
         cv2.destroyAllWindows()
-        self.save_transform_matrix("/home/orin/WorkSpace/robot_ws/src/robot_vision/data/matrix.npy")
-    
+        self.save_transform_matrix(self.matrix_path)
+
+
 def gstreamer_pipeline(
-        sensor_id=0,
-        capture_width=1280,
-        capture_height=720,
-        display_width=WIDTH,   # 建议与捕获分辨率一致以避免缩放
-        display_height=HEIGHT,
-        framerate=30,    
-        flip_method=0,    
-    ):
-        return (
-            "nvarguscamerasrc sensor-id=%d ! "
-            "video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, framerate=(fraction)%d/1 ! "
-            "nvvidconv flip-method=%d ! "
-            "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
-            "videoconvert ! "
-            "video/x-raw, format=(string)BGR ! appsink"
-            % (
-                sensor_id,
-                capture_width,
-                capture_height,
-                framerate,
-                flip_method,
-                display_width,
-                display_height,
-            )
+    sensor_id=0,
+    capture_width=1280,
+    capture_height=720,
+    display_width=WIDTH,  # 建议与捕获分辨率一致以避免缩放
+    display_height=HEIGHT,
+    framerate=30,
+    flip_method=0,
+):
+    return (
+        "nvarguscamerasrc sensor-id=%d ! "
+        "video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, framerate=(fraction)%d/1 ! "
+        "nvvidconv flip-method=%d ! "
+        "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
+        "videoconvert ! "
+        "video/x-raw, format=(string)BGR ! appsink"
+        % (
+            sensor_id,
+            capture_width,
+            capture_height,
+            framerate,
+            flip_method,
+            display_width,
+            display_height,
         )
+    )
+
 
 if __name__ == "__main__":
     # 创建校准对象
     calibration = PerspectiveTransforms()
-    video_capture = cv2.VideoCapture(gstreamer_pipeline(flip_method=0), cv2.CAP_GSTREAMER)
+    video_capture = cv2.VideoCapture(
+        gstreamer_pipeline(flip_method=0), cv2.CAP_GSTREAMER
+    )
 
     if not video_capture.isOpened():
         print("无法打开摄像头。")
@@ -231,14 +243,13 @@ if __name__ == "__main__":
     while True:
         ret_val, frame = video_capture.read()
         cv2.imshow("input", frame)
-        keyCode = cv2.waitKey(30) & 0xFF        
+        keyCode = cv2.waitKey(30) & 0xFF
         # 按下esc暂停
-        if keyCode == '24':
-            break 
+        if keyCode == "24":
+            break
         # 使用时间来暂停
         # if time.time() - now_time > 3:
         #     break
 
-    
     # 执行透视校准
     calibration.calibration_perspective(frame)

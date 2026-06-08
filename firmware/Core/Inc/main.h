@@ -42,9 +42,7 @@ extern "C" {
 #include "gpio.h"
 #include <math.h>
 #include "oled.h"
-#include "motor.h"
 #include "transmit.h"
-#include "pid.h"
 #include "pca9685.h"
 #include "my_MPU6050.h"
 #include "new-controls.h"

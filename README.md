@@ -125,10 +125,7 @@ rubbish_car/
 │   ├── move_joints.py            # 关节平滑插值运动控制
 │   └── client.py                 # ROS2 服务客户端封装
 ├── robot_serial/                 # 串口通信模块
-│   ├── serial_send.py            # UART 发送服务节点
-│   └── serial_receive.py         # UART 接收调试工具
-├── robot_control/                # 控制指令模块
-│   └── arm_send.py               # 机械臂 IK 计算 + 串口指令发送客户端
+│   └── serial_send.py            # UART 发送服务节点
 ├── robot_launch/                 # ROS2 启动配置
 │   └── launch/
 │       ├── start.py              # 主启动文件（一键启动所有节点）
@@ -138,9 +135,6 @@ rubbish_car/
 │   ├── Core/
 │   │   ├── Src/
 │   │   │   ├── main.c            # STM32 主程序
-│   │   │   ├── motor.c           # 电机 PID 闭环控制
-│   │   │   ├── pid.c             # PID 算法实现
-│   │   │   ├── arm.c             # 舵机控制（机械臂）
 │   │   │   ├── pca9685.c         # PCA9685 舵机驱动（I2C）
 │   │   │   ├── lift.c            # 升降机构控制
 │   │   │   ├── my_MPU6050.c      # MPU6050 姿态传感器
@@ -153,7 +147,6 @@ rubbish_car/
 │   └── freertos_chuankou.ioc    # STM32CubeMX 工程配置
 ├── web/                          # Web 远程控制面板
 │   └── index.html                # 单页应用（MQTT + 响应式 UI）
-├── models/                       # 模型权重（已 gitignore，需单独下载）
 ├── media/                        # 项目展示图片
 ├── docs/                         # 项目文档
 │   ├── system-design.md          # 系统设计说明
