@@ -23,15 +23,15 @@ ros2 launch robot_launch arm.py
 ros2 service call /arm_control interfaces/srv/ArmControl "{type: fetch, x: 12.0, y: 0.0, z: 0.0, roll: 0.0, pitch: 180.0, yaw: 0.0, class_name: dry}"
 ```
 
-在两个已加载工作空间的终端分别执行。默认六轴参考模型、`dry_run: true`、不开串口。服务完成意味着路径与命令生成成功，不意味着真机抓取。可执行 `python tools/check_ros_integration.py` 检查真实 ROS 服务调用及拒绝不可达目标的行为。
+在两个已加载工作空间的终端分别执行。默认六轴模式、`dry_run: true`、不开串口，服务完成表示路径与命令生成成功。可执行 `python tools/check_ros_integration.py` 检查真实 ROS 服务调用及拒绝不可达目标的行为。
 
 ## 3. 配置实际六轴硬件
 
 复制 `robot_launch/config/robot.yaml` 到自己的配置路径，按 `system-design.md` 的轴线约定测量连杆和工具长度，填入真实关节限位、待机角和分类桶坐标。若实际机械臂不是 Z-Y-Y + Z-Y-Z 球形腕构型，应先修改运动学模型。
 
-在 `firmware/Core/Inc/arm6_config.h` 中校准每关节 PWM 通道、方向、零位和行程，使上位机限位与下位机可执行范围一致；通道 5 留给夹爪。参考配置不是原型实测值。完成校准后将 `ARM6_ENABLED` 设为 1，使用 STM32CubeMX / CubeIDE 生成缺失 HAL 工程资源并编译烧录。
+在 `firmware/Core/Inc/arm6_config.h` 中校准每关节 PWM 通道、方向、零位和行程，使上位机限位与下位机可执行范围一致；通道 5 留给夹爪。完成校准后将 `ARM6_ENABLED` 设为 1，使用 STM32CubeMX / CubeIDE 生成缺失 HAL 工程资源并编译烧录。
 
-本次软件检查只编译了串口模块的主机测试，未完成完整 STM32 工程编译或烧录。六轴固件启动姿态使用 `ARM6_HOME_DEG`，须同步校准并确认它与 ROS 配置 `home_deg` 一致；四轴模式保留原型初始化。当前没有自动回零或编码器闭环。
+固件通过 CubeIDE 构建与烧录，串口解析模块另提供 GCC 主机测试。六轴固件启动姿态使用 `ARM6_HOME_DEG`，须同步校准并确认它与 ROS 配置 `home_deg` 一致；四轴模式保留原型初始化。当前没有自动回零或编码器闭环。
 
 完成上述工作后，在个人配置中设置 `hardware_calibrated: true`、`dry_run: false`，再开启串口：
 

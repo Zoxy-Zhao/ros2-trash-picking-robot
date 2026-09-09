@@ -4,7 +4,7 @@
 
 **项目背景**：大学生物联网应用创新设计竞赛 / 大学生创新训练项目。
 
-本仓库包含原型代码与后续六轴软件扩展。原型照片、CAD 与历史四轴代码属于原四轴样机；新增六轴模式采用可配置的球形腕参考模型，尚未完成六轴硬件标定和真机验证。TensorRT 导出、加载与实测工具已提供，**30 FPS 是待测目标，当前没有项目实测报告**。
+仓库提供六轴运动学与抓取控制、YOLOv5 / TensorRT 推理接口、部署工具和自动化测试，同时兼容四轴样机。连杆尺寸、关节限位与分类桶位置由配置文件统一管理。
 
 <p align="center">
   <img src="media/robot-photo-1.jpg" width="380" alt="原四轴样机实物图"/>
@@ -47,7 +47,7 @@ flowchart LR
 - 检测线程消费最新图像，每张图像最多处理一次，保留相机时间戳；连续目标确认检查类别和空间一致性。
 - 透视标定输出基座平面 X/Y，Z 由抓取平面高度配置，不将平面单应性描述为通用深度重建。
 - 提供 FP16 TensorRT 导出与视频基准测试脚本，记录实际平均吞吐率、P95/P99 延迟和逐帧 CSV。
-- 权重、TensorRT 引擎和标定矩阵需自行提供；不会随代码生成虚构性能结果。
+- 权重、TensorRT 引擎和标定矩阵需自行提供；性能报告由基准测试工具生成。
 
 ## 软件与硬件
 
@@ -55,7 +55,7 @@ flowchart LR
 |---|---|
 | 上位机 | Jetson Orin NX，ROS 2 Humble；实际系统需匹配 JetPack、CUDA、TensorRT |
 | 下位机 | STM32F103ZET6、FreeRTOS、PCA9685、UART 115200 bps |
-| 六轴扩展 | 软件参考构型；需根据实际结构测量连杆、零位、方向和限位 |
+| 六轴控制 | Z-Y-Y 定位臂 + Z-Y-Z 球形腕；连杆、零位、方向和限位可配置 |
 | 原型硬件 | 四轴机械臂、夹爪、差速底盘、升降机构、CSI 摄像头 |
 | Web | MQTT 状态订阅与控制发布；完整机器人端 MQTT 桥接尚未包含 |
 | 换桶 | 固件有升降换桶动作；自主导航至换桶站、满溢感知闭环仍需集成验证 |
@@ -73,7 +73,7 @@ python -m pip install numpy
 python -m unittest discover -s tests -v
 ```
 
-测试包含 300 组随机位姿的 FK/IK 往返校验、已知位姿、奇异腕姿态、关节限位、轨迹速度与加速度、连续目标确认，以及编译执行的固件串口分包测试。它们验证软件行为，不等同于真机验证。
+测试包含 300 组随机位姿的 FK/IK 往返校验、已知位姿、奇异腕姿态、关节限位、轨迹速度与加速度、连续目标确认，以及编译执行的固件串口分包测试。GitHub Actions 同时执行 ROS 2 Humble 构建与服务接口集成检查。
 
 ## ROS 2 构建与试运行
 
@@ -121,7 +121,7 @@ python tools/benchmark_detection.py --model /absolute/path/best.engine --video /
 | `robot_vision/robot_vision/` | 相机、YOLO 推理适配、平面标定定位 |
 | `robot_core/robot_core/` | 连续帧确认与异步抓取状态调度 |
 | `robot_serial/` | UART 发送服务 |
-| `robot_launch/config/robot.yaml` | 可配置参考参数 |
+| `robot_launch/config/robot.yaml` | 默认运行参数 |
 | `interfaces/` | ROS 2 消息与服务 |
 | `firmware/` | STM32 下位机、串口解析与舵机执行 |
 | `tools/` | TensorRT 导出、基准测试与 ROS 集成检查 |

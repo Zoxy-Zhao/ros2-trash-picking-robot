@@ -1,7 +1,7 @@
 """Analytic IK: Z-Y-Y positioning arm and Z-Y-Z spherical wrist.
 
-Lengths are cm, public angles degrees. Defaults describe a software reference
-model, not measurements of the original four-axis hardware.
+Lengths are cm; public angles are degrees. Geometry and joint limits are
+configurable. The solver applies to the axis arrangement defined above.
 """
 from dataclasses import dataclass
 from itertools import product

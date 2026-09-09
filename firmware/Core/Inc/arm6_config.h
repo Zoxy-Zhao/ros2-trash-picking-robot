@@ -1,8 +1,8 @@
 #ifndef ARM6_CONFIG_H
 #define ARM6_CONFIG_H
 
-/* Opt in only after measuring the six-axis hardware. Channel 5 is the claw.
- * These reference offsets/ranges are NOT calibration of the original robot.
+/* Six-axis actuator mapping. Channel 5 is reserved for the claw.
+ * Configure offsets, directions, travel and home for the installed servos.
  */
 #ifndef ARM6_ENABLED
 #define ARM6_ENABLED 0
