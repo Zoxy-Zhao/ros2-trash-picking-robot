@@ -1,52 +1,74 @@
-# 确认夹取物体是否合法
-import rclpy
-from rclpy.parameter import Parameter
+"""Non-blocking detect/pause/localize/grasp/resume state machine."""
+import time
 from robot_core.client import Client
+from robot_core.target_gate import TargetGate
+
 
 class Confirm:
-
     def __init__(self, node):
         self.node = node
         self.client = Client(node)
-        self.number = 0
+        self.gate = TargetGate()
+        self.stage = 'idle'
+        self.pending = None
+        node.declare_parameter('grasp_z_cm', 0.)
+        node.declare_parameter('grasp_rpy_deg', [0., 180., 0.])
+        node.declare_parameter('grasp_timeout_sec', 120.)
+        self.timer = node.create_timer(0.05, self.tick)
 
     def confirm_flush(self, boxes):
-        """更新信息"""
-        self.boxes = boxes
-        box = self.get_highest_confidence_box_center(boxes)
-        if box is not None:
-            self.confirm_object(box)
-        
-    def confirm_object(self, box): 
-        """确认夹取目标"""
-        if box.confidence > 0.7 and self.confirm_location(box):
-            self.node.get_logger().info("发现高置信度目标")
+        if self.stage != 'idle':
+            return
+        box = self.gate.update(boxes)
+        if box is None:
+            return
+        services = (self.client.arm_control, self.client.enable_detection, self.client.perspective_server)
+        if not all(s.service_is_ready() for s in services):
+            self.node.get_logger().warning('Grasp services not ready')
+            return
+        self.box = box
+        self.submit('pausing', self.client.detection(False), 5.)
 
-            #当连续10帧都是高置信度则准备开启夹取
-            if self.number > 10:
+    def submit(self, stage, future, timeout):
+        self.stage, self.pending = stage, future
+        self.deadline = time.monotonic() + timeout
 
-                self.client.stop_yolo()
-                x ,y = self.client.get_perspective((box.xmin + box.xmax) / 2, (box.ymin + box.ymax) / 2)
-                self.client.fetch_object(x ,y ,0)
-                self.client.start_yolo()
+    def resume(self):
+        self.submit('resuming', self.client.detection(True), 5.)
 
-                self.number = 0
-                
+    def tick(self):
+        if self.pending is None:
+            return
+        if not self.pending.done():
+            if time.monotonic() < self.deadline:
+                return
+            # A timed-out arm request can still be executing. Latch fault to
+            # avoid scheduling another grasp over an unknown physical state.
+            self.pending = None
+            self.stage = 'fault'
+            self.node.get_logger().error('Service timeout; execution state unknown. Restart after checking robot.')
+            return
+        try:
+            result = self.pending.result()
+            self.pending = None
+            if result is None or not result.success:
+                raise RuntimeError(f'{self.stage} service failed')
+            if self.stage == 'pausing':
+                b = self.box
+                self.submit('localizing', self.client.perspective((b.xmin+b.xmax)/2, (b.ymin+b.ymax)/2), 5.)
+            elif self.stage == 'localizing':
+                self.submit('grasping', self.client.fetch(result.x_real, result.y_real,
+                            self.node.get_parameter('grasp_z_cm').value, self.box.class_name,
+                            self.node.get_parameter('grasp_rpy_deg').value),
+                            self.node.get_parameter('grasp_timeout_sec').value)
+            elif self.stage == 'grasping':
+                self.resume()
+            elif self.stage == 'resuming':
+                self.stage = 'idle'
+                self.gate.reset()
+        except Exception as exc:
+            self.node.get_logger().error(str(exc))
+            if self.stage in ('pausing', 'localizing'):
+                self.resume()
             else:
-                self.number += 1
-        else:
-            self.number = 0
-
-    def confirm_location(self, box):
-        """确认目标位置是否合法"""
-        return True
-
-    def get_highest_confidence_box_center(self, boxes):
-        """返回置信度最高的框"""
-        max_box = None
-        confidence = 0
-        for i, box in enumerate(boxes, 1):
-            if box.confidence > confidence:
-                max_box = box
-                confidence = box.confidence
-        return max_box
+                self.stage, self.pending = 'fault', None

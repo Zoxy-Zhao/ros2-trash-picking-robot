@@ -2,6 +2,7 @@
 #define INC_TRANSMIT_H_
 
 #include "main.h"
+#define UART_FRAME_SIZE 64
 #include "cmsis_os.h"
 #include "queue.h"
 #include "usart.h"

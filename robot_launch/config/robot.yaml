@@ -1,0 +1,36 @@
+# Software reference configuration. Replace geometry, limits and bin locations
+# with measurements before enabling physical outputs.
+arm_control:
+  ros__parameters:
+    arm_dof: 6
+    dry_run: true
+    hardware_calibrated: false
+    link_dimensions_cm: [15.0, 10.4, 9.1, 5.0]
+    joint_limits_deg: [-180.0, 180.0, -180.0, 180.0, -180.0, 180.0, -180.0, 180.0, -180.0, 180.0, -180.0, 180.0]
+    home_deg: [0.0, -45.0, 90.0, 0.0, 45.0, 0.0]
+    dry_bin_cm: [12.0, 10.0, 10.0]
+    wet_bin_cm: [12.0, -10.0, 10.0]
+    dry_classes: [dry, 干垃圾]
+    wet_classes: [wet, 湿垃圾]
+    approach_height_cm: 3.0
+    step_degrees: 5.0
+    gripper_delay_sec: 1.0
+
+detection_subscriber:
+  ros__parameters:
+    grasp_z_cm: 0.0
+    grasp_rpy_deg: [0.0, 180.0, 0.0]
+    grasp_timeout_sec: 120.0
+
+yolo_detector:
+  ros__parameters:
+    model_family: yolov5
+    model_path: ~/robot_ws/models/best.engine
+    yolov5_repo: ~/yolov5
+    device: '0'
+    imgsz: 640
+    display: false
+
+perspective_service:
+  ros__parameters:
+    matrix_path: ~/robot_ws/calibration/matrix.npy

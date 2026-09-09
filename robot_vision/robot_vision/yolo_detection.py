@@ -1,147 +1,115 @@
-# YOLO识别节点
+"""Latest-frame detection with explicit PyTorch/TensorRT backend selection."""
+import os
+import threading
+import time
+import cv2
 import rclpy
 from rclpy.node import Node
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
-from std_msgs.msg import Header
 from interfaces.msg import BoundingBox, BoundingBoxArray
 from interfaces.srv import Boolean
-from ultralytics import YOLO
-import torch
-import cv2
-import threading
-import time
+from robot_vision.inference import Detector
 
 
 class YOLODetector(Node):
     def __init__(self):
-        super().__init__("yolo_detector")
+        super().__init__('yolo_detector')
+        for name, default in {
+            'model_path': os.path.expanduser('~/robot_ws/models/best.engine'),
+            'model_family': 'yolov5', 'yolov5_repo': os.path.expanduser('~/yolov5'),
+            'device': '0', 'imgsz': 640, 'display': False,
+        }.items():
+            self.declare_parameter(name, default)
+        self.detector = Detector(self.get_parameter('model_path').value,
+                                 self.get_parameter('model_family').value,
+                                 self.get_parameter('yolov5_repo').value,
+                                 self.get_parameter('device').value,
+                                 self.get_parameter('imgsz').value)
+        self.display = self.get_parameter('display').value
         self.bridge = CvBridge()
-        self.latest_frame = None
         self.frame_lock = threading.Lock()
-
-        # 加载YOLO模型
-        torch.backends.cudnn.enabled = True
-        torch.backends.cudnn.benchmark = True
-        # 模型路径可通过 ROS2 参数 model_path 覆盖，默认指向工作空间下的权重文件
-        self.declare_parameter(
-            "model_path",
-            os.path.expanduser("~/robot_ws/src/robot_vision/model/best.pt"),
-        )
-        model_path = self.get_parameter("model_path").get_parameter_value().string_value
-        self.model = YOLO(model_path)
-        self.model.fuse()
-
-        # 订阅摄像头
-        self.subscription = self.create_subscription(
-            Image,
-            "camera/image",
-            self.image_callback,
-            qos_profile=rclpy.qos.QoSPresetProfiles.SENSOR_DATA.value,
-        )
-
-        # 服务
+        self.latest_frame = None
         self.enable = True
-        self.server = self.create_service(
-            Boolean, "enable_detection", self.enable_detection
-        )
-
-        # 发布者
-        self.bbox_pub = self.create_publisher(BoundingBoxArray, "detection_boxes", 10)
-
-        # 启动处理线程
-        self.process_thread = threading.Thread(target=self.process_frame)
+        self.generation = 0
+        self.stop = threading.Event()
+        self.ready = threading.Event()
+        self.subscription = self.create_subscription(Image, 'camera/image', self.image_callback,
+                                                       rclpy.qos.qos_profile_sensor_data)
+        self.server = self.create_service(Boolean, 'enable_detection', self.enable_detection)
+        self.bbox_pub = self.create_publisher(BoundingBoxArray, 'detection_boxes', 10)
+        self.process_thread = threading.Thread(target=self.process_frame, daemon=True)
         self.process_thread.start()
 
-        self.get_logger().info(f"YOLO节点已启动，CUDA可用: {torch.cuda.is_available()}")
-
     def enable_detection(self, request, response):
-        self.enable = request.status
+        with self.frame_lock:
+            self.enable = request.status
+            self.generation += 1
+            self.latest_frame = None
         response.success = True
         return response
 
     def image_callback(self, msg):
-        """异步接收图像帧，仅更新最新帧"""
         try:
-            cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
             with self.frame_lock:
-                self.latest_frame = cv_image
-        except Exception as e:
-            self.get_logger().error(f"图像转换失败: {e}")
+                if not self.enable:
+                    return
+                self.latest_frame = (frame, msg.header, self.generation)
+            self.ready.set()
+        except Exception as exc:
+            self.get_logger().error(str(exc))
 
     def process_frame(self):
-        """专用处理线程"""
-        while rclpy.ok():
-            if self.enable is not True:
-                time.sleep(0.01)
-                continue
-
-            start_time = time.time()
-
-            # 获取当前帧
+        while not self.stop.is_set():
+            self.ready.wait(0.1)
+            self.ready.clear()
             with self.frame_lock:
-                if self.latest_frame is None:
-                    time.sleep(0.001)
-                    continue
-                current_frame = self.latest_frame.copy()
+                item, self.latest_frame = self.latest_frame, None
+            if item is None:
+                continue
+            frame, header, generation = item
+            started = time.perf_counter()
+            try:
+                records = self.detector.predict(frame)
+                message = BoundingBoxArray()
+                message.header = header
+                for name, conf, x1, y1, x2, y2 in records:
+                    box = BoundingBox()
+                    box.class_name, box.confidence = name, conf
+                    box.xmin, box.ymin, box.xmax, box.ymax = x1, y1, x2, y2
+                    message.boxes.append(box)
+                    if self.display:
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                with self.frame_lock:
+                    if not self.enable or generation != self.generation:
+                        continue
+                    self.bbox_pub.publish(message)
+                latency_ms = (time.perf_counter()-started)*1000
+                self.get_logger().info(f'Detection processing: {latency_ms:.1f} ms', throttle_duration_sec=2.)
+                if self.display:
+                    cv2.imshow('Detection', frame)
+                    cv2.waitKey(1)
+            except Exception as exc:
+                self.get_logger().error(f'Inference stopped: {exc}')
+                self.stop.set()
 
-            # YOLO推理
-            results = self.model(current_frame, imgsz=640, verbose=False)
-
-            # 创建结果消息
-            bbox_array = BoundingBoxArray()
-            header = Header()
-            header.stamp = self.get_clock().now().to_msg()
-            header.frame_id = "camera"
-            bbox_array.header = header
-
-            # 解析检测结果
-            if results[0].boxes is not None:
-                for box in results[0].boxes:
-                    xyxy = box.xyxy[0].cpu().numpy().astype(int)
-                    conf = box.conf[0].cpu().numpy().item()
-                    cls_id = int(box.cls[0].cpu().numpy().item())
-
-                    bbox = BoundingBox()
-                    bbox.class_name = self.model.names[cls_id]
-                    bbox.confidence = float(conf)
-                    bbox.xmin = int(xyxy[0])
-                    bbox.ymin = int(xyxy[1])
-                    bbox.xmax = int(xyxy[2])
-                    bbox.ymax = int(xyxy[3])
-                    bbox_array.boxes.append(bbox)
-
-            # 发布检测结果数组
-            self.bbox_pub.publish(bbox_array)
-
-            # 性能监控
-            process_fps = 1 / (time.time() - start_time + 1e-6)
-            self.get_logger().info(
-                f"处理帧率: {process_fps:.1f}FPS | 检测到 {len(bbox_array.boxes)} 个目标",
-                throttle_duration_sec=1,
-            )
-
-            # 本地显示结果
-            annotated_frame = results[0].plot()
-            cv2.imshow("Local Preview", annotated_frame)
-            cv2.waitKey(1)
+    def destroy_node(self):
+        self.stop.set()
+        self.ready.set()
+        self.process_thread.join(timeout=5.)
+        if self.display:
+            cv2.destroyAllWindows()
+        super().destroy_node()
 
 
 def main(args=None):
     rclpy.init(args=args)
-    detector = YOLODetector()
-
+    node = YOLODetector()
     try:
-        executor = rclpy.executors.MultiThreadedExecutor()
-        executor.add_node(detector)
-        executor.spin()
+        rclpy.spin(node)
     except KeyboardInterrupt:
-        detector.get_logger().info("检测节点关闭")
+        pass
     finally:
-        detector.destroy_node()
+        node.destroy_node()
         rclpy.shutdown()
-        cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    main()

@@ -6,10 +6,10 @@ from rclpy.qos import QoSReliabilityPolicy, QoSProfile
 from robot_core.confirm import Confirm
 
 class DetectionSubscriber(Node):
-    def __init__(self, node):
+    def __init__(self, node=None):
         super().__init__('detection_subscriber')
 
-        self.confirm = Confirm(node)
+        self.confirm = Confirm(self)
         
         # 配置QoS以匹配发布者设置
         qos_profile = QoSProfile(

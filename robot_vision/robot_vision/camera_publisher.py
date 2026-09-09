@@ -15,7 +15,7 @@ class CameraPublisher(Node):
 
         if not self.video_capture.isOpened():
             self.get_logger().error("无法打开摄像头。")
-            return
+            raise RuntimeError("Camera unavailable")
 
         self.get_logger().info("摄像头已成功打开。")
 
@@ -35,7 +35,7 @@ class CameraPublisher(Node):
             "nvvidconv flip-method=%d ! "
             "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
             "videoconvert ! "
-            "video/x-raw, format=(string)BGR ! appsink"
+            "video/x-raw, format=(string)BGR ! appsink drop=true max-buffers=1"
             % (
                 sensor_id,
                 capture_width,
@@ -52,6 +52,8 @@ class CameraPublisher(Node):
         if ret_val:
             # 将 OpenCV 帧转换为 ROS 图像消息
             ros_image = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+            ros_image.header.stamp = self.get_clock().now().to_msg()
+            ros_image.header.frame_id = "camera"
             self.publisher_.publish(ros_image)
         else:
             self.get_logger().error("从摄像头读取帧时出错。")

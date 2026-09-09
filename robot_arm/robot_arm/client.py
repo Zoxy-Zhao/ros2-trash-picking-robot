@@ -14,6 +14,8 @@ class MoveJointsClient(Node):
     def send_request(self):
         request = ArmControl.Request()
         request.type = "fetch"
+        request.pitch = 180.0
+        request.class_name = "dry"
         request.x = 20.0
         request.y = 0 + 1.5
         request.z = 0.0

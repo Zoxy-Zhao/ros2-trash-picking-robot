@@ -1,215 +1,141 @@
-# 净境先锋 - 基于 ROS2 的智能垃圾拾取机器人
+# 净境先锋 - 基于 ROS 2 的智能垃圾拾取机器人
+
+面向办公与公共空间的垃圾识别、视觉定位、机械臂抓取与分类投放项目，采用 **Jetson Orin NX + STM32F103ZET6** 主从架构，结合 ROS 2、YOLOv5、几何逆运动学、关节轨迹和 UART 控制；Web 端通过 MQTT 提供远程交互。
+
+**项目背景**：大学生物联网应用创新设计竞赛 / 大学生创新训练项目。
+
+本仓库包含原型代码与后续六轴软件扩展。原型照片、CAD 与历史四轴代码属于原四轴样机；新增六轴模式采用可配置的球形腕参考模型，尚未完成六轴硬件标定和真机验证。TensorRT 导出、加载与实测工具已提供，**30 FPS 是待测目标，当前没有项目实测报告**。
 
 <p align="center">
-  <img src="media/robot-photo-1.jpg" width="380" alt="机器人实物图 1"/>
-  <img src="media/robot-photo-2.jpg" width="380" alt="机器人实物图 2"/>
+  <img src="media/robot-photo-1.jpg" width="380" alt="原四轴样机实物图"/>
+  <img src="media/robot-photo-2.jpg" width="380" alt="原四轴样机实物图"/>
 </p>
 
-基于 **NVIDIA Jetson Orin NX + STM32F103ZET6** 主从架构的智能垃圾拾取机器人，融合 ROS2 分布式通信、YOLOv5 目标检测、透视变换三维定位、4轴机械臂逆运动学抓取、MQTT 物联网通信及 Web 远程控制，实现垃圾的自主识别、分类抓取与云端管控全闭环。
+## 运动控制与视觉执行链
 
-**项目背景**：大学生物联网应用创新设计竞赛 / 大学生创新训练项目
-
-## 系统界面
-
-<p align="center">
-  <img src="media/web-home.png" width="600" alt="净境控制中心 Web 界面"/>
-  <br/>
-  <sub>需要观看作品演示视频，可联系作者提供。</sub>
-</p>
-
-
-## 技术栈
-
-| 层级 | 组件 | 职责 |
-|------|------|------|
-| 上位机 | NVIDIA Jetson Orin NX | ROS2 运行环境、AI 视觉推理、路径规划、任务调度 |
-| 下位机 | STM32F103ZET6（FreeRTOS） | 电机 PID 闭环控制、舵机驱动、传感器采集、升降机构控制 |
-| 视觉 | CSI 摄像头 x2（全局 + 局部） | 全局：大范围巡航垃圾搜索；局部：抵近后精准识别与三维定位 |
-| 机械臂 | 自研 4 轴（4 舵机 + PCA9685） | 逆运动学解算，精准抓取垃圾并分类投放 |
-| 通信 | UART 115200bps + MQTT (EMQX) | 上下位机通信 + 云端物联网数据通道 |
-| 控制端 | Web 单页应用 | 状态监控、远程遥控、系统信息面板 |
-
-## 系统架构
-
-<p align="center">
-  <img src="media/architecture-overview.png" width="400" alt="三层架构"/>
-  <img src="media/architecture-robot.png" width="400" alt="机器人终端架构"/>
-</p>
-
-系统采用**"端-管-云"**三层物联网架构：
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    净境控制中心 (Web 客户端)                       │
-│     状态监控  │  智能控制（自动/手动/高级）  │  系统信息            │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ MQTT (发布/订阅)
-                    ┌──────┴──────┐
-                    │ EMQX Broker │  ← Docker 部署
-                    └──────┬──────┘
-                           │ MQTT
-┌──────────────────────────┴──────────────────────────────────────┐
-│                     机器人终端 (Jetson + STM32)                   │
-│                                                                  │
-│  Jetson Orin NX (ROS2)                STM32F103 (FreeRTOS)      │
-│  ├── 摄像头采集 (camera_publisher)     ├── 电机 PID 控制          │
-│  ├── YOLOv5 检测 (yolo_detection)     ├── PCA9685 舵机驱动       │
-│  ├── 透视变换 (perspective_service)    ├── MPU6050 姿态解算       │
-│  ├── 目标确认 (detection_subscriber)   ├── 升降机构控制           │
-│  ├── 机械臂 IK (arm_control)          ├── OLED 状态显示          │
-│  └── 串口通信 (serial_send)  ←UART→   └── 串口命令解析           │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    A[CSI 图像采集] --> B[YOLOv5 / TensorRT 检测]
+    B --> C[连续新帧与目标一致性确认]
+    C --> D[标定平面坐标转换]
+    D --> E[六轴几何 IK / 可达性判断]
+    E --> F[接近、抓取、抬升、分类投放]
+    F --> G[关节五次插值]
+    G --> H[ARM6 / UART]
+    H --> I[STM32 / PCA9685]
 ```
 
-## 核心功能
+### 六轴几何逆运动学与可达性
 
-### 视觉识别与三维定位
+- `six_axis.py`：针对 **Z-Y-Y 定位臂 + Z-Y-Z 球形腕**，进行腕心分离、肩部和肘部几何求解、腕部姿态分解。
+- 枚举肩部、肘部与腕部候选解，检查关节限位，以 FK 复核目标位姿，并按相对当前指令位置的关节行程选解。
+- 腕部奇异时尝试保留种子关节角，并检查限位端点；不可达目标返回失败。
+- 几何尺寸、关节限位、待机姿态、分类桶位置均可配置。**不适用于任意六轴构型，也不包含碰撞检测。**
+- 保留 `ik_service.py` 四轴原型求解器，`arm_dof: 4` 可选择历史模式。
 
-- **YOLOv5 目标检测**：自定义数据集训练，GPU 加速推理，实时检测干/湿垃圾
-- **透视变换定位**：相机标定 → 透视矩阵 → 2D 像素坐标精确映射为 3D 世界坐标
-- **连续帧确认**：目标需连续 10 帧以上保持高置信度（>70%）才触发抓取，有效防止误操作
+### 轨迹与抓取调度
 
-### 机械臂抓取
+- 四／六关节同步五次插值，按最大速度与加速度确定轨迹时长。
+- 抓取前检查所有路径点的 IK；执行接近、夹取、抬升、分类投放、返回流程。
+- ROS 2 异步服务协调检测暂停、坐标转换、抓取与恢复，避免嵌套执行器等待。
+- `ARM` 与 `ARM6` 独立编码；六轴使用 PCA9685 通道 0、1、2、3、4、6，通道 5 留给夹爪。
+- 默认 `dry_run: true`：计算路径与命令，不驱动硬件。UART 写入成功仅代表发送完成，不代表关节到位或抓取成功。
 
-- **逆运动学解算**：4 轴串联臂（L1=15, L2=10.4, L3=9.1, L4=18.4 cm），余弦定理求解关节角度
-- **平滑插值运动**：等步长关节插值（5°/步，100ms/步），确保运动平滑无冲击
-- **自动分类投放**：根据 YOLO 识别结果，将垃圾投放至对应的干/湿垃圾桶
+### 视觉定位与 TensorRT 部署
 
-### 物联网远程控制
+- 支持原版 YOLOv5 的 `.pt` / `.engine` 模型；另提供 Ultralytics 模型适配器，按训练框架显式选择。
+- 检测线程消费最新图像，每张图像最多处理一次，保留相机时间戳；连续目标确认检查类别和空间一致性。
+- 透视标定输出基座平面 X/Y，Z 由抓取平面高度配置，不将平面单应性描述为通用深度重建。
+- 提供 FP16 TensorRT 导出与视频基准测试脚本，记录实际平均吞吐率、P95/P99 延迟和逐帧 CSV。
+- 权重、TensorRT 引擎和标定矩阵需自行提供；不会随代码生成虚构性能结果。
+
+## 软件与硬件
+
+| 层级 | 组件 / 状态 |
+|---|---|
+| 上位机 | Jetson Orin NX，ROS 2 Humble；实际系统需匹配 JetPack、CUDA、TensorRT |
+| 下位机 | STM32F103ZET6、FreeRTOS、PCA9685、UART 115200 bps |
+| 六轴扩展 | 软件参考构型；需根据实际结构测量连杆、零位、方向和限位 |
+| 原型硬件 | 四轴机械臂、夹爪、差速底盘、升降机构、CSI 摄像头 |
+| Web | MQTT 状态订阅与控制发布；完整机器人端 MQTT 桥接尚未包含 |
+| 换桶 | 固件有升降换桶动作；自主导航至换桶站、满溢感知闭环仍需集成验证 |
 
 <p align="center">
-  <img src="media/web-control.png" width="380" alt="智能控制中心"/>
-  <img src="media/web-status.png" width="380" alt="状态监控中心"/>
+  <img src="media/web-home.png" width="600" alt="Web 控制中心"/>
 </p>
 
-- **状态监控**：电源系统、垃圾收集状态、运行模式、网络状态实时显示
-- **智能控制**：自动模式（预设路径清扫）/ 手动模式（虚拟摇杆遥控）/ 高级控制（换桶/急停）
-- **系统信息**：设备硬件信息、操作日志实时记录
+## 无硬件测试
 
-### 自主维护
-
-- 满溢检测：自动判断垃圾桶是否已满
-- 自动换桶：导航至更换站，执行升降机构换桶流程
-- 自动上桶：任务开始前从更换站自动装载空桶
-
-## 3D 建模
-
-<p align="center">
-  <img src="media/3d-model-chassis.png" width="260" alt="底盘结构"/>
-  <img src="media/3d-model-arm.png" width="260" alt="机械臂安装"/>
-  <img src="media/3d-model-assembly.png" width="260" alt="整机装配"/>
-</p>
-
-整机结构使用 SolidWorks 自主建模设计，亚克力板 + 3D 打印件，实现各电子元器件和执行机构的高度集成与定制化布局。
-
-## 目录结构
-
-```
-rubbish_car/
-├── interfaces/                   # ROS2 自定义消息与服务接口
-│   ├── msg/                      # 自定义消息（BoundingBox, BoundingBoxArray）
-│   └── srv/                      # 自定义服务（ArmControl, Perspective, Boolean, SendString）
-├── robot_vision/                 # 视觉感知模块
-│   ├── camera_publisher.py       # CSI 摄像头图像采集与 ROS2 话题发布
-│   ├── yolo_detection.py         # YOLOv5 实时目标检测节点（CUDA 加速）
-│   ├── perspective.py            # 透视变换服务：2D 像素坐标 → 3D 世界坐标
-│   └── image_subscriber.py       # 图像订阅调试工具
-├── robot_core/                   # 核心决策模块
-│   ├── main_node.py              # 主节点入口，多线程执行器
-│   ├── detection_subscriber.py   # 检测结果订阅与处理
-│   ├── confirm.py                # 目标确认策略（连续帧 + 置信度阈值）
-│   └── client.py                 # ROS2 服务客户端封装（机械臂/YOLO/透视变换）
-├── robot_arm/                    # 机械臂控制模块
-│   ├── arm_control.py            # 机械臂控制服务节点
-│   ├── ik_service.py             # 逆运动学解算器（4轴）
-│   ├── move_joints.py            # 关节平滑插值运动控制
-│   └── client.py                 # ROS2 服务客户端封装
-├── robot_serial/                 # 串口通信模块
-│   └── serial_send.py            # UART 发送服务节点
-├── robot_launch/                 # ROS2 启动配置
-│   └── launch/
-│       ├── start.py              # 主启动文件（一键启动所有节点）
-│       ├── arm.py                # 机械臂单独启动
-│       └── yolo.py               # YOLO 检测单独启动
-├── firmware/                     # 下位机固件（STM32F103ZET6 + FreeRTOS）
-│   ├── Core/
-│   │   ├── Src/
-│   │   │   ├── main.c            # STM32 主程序
-│   │   │   ├── pca9685.c         # PCA9685 舵机驱动（I2C）
-│   │   │   ├── lift.c            # 升降机构控制
-│   │   │   ├── my_MPU6050.c      # MPU6050 姿态传感器
-│   │   │   ├── transmit.c        # 串口命令解析与分发
-│   │   │   ├── new-controls.c    # 运动控制逻辑
-│   │   │   ├── oled.c            # OLED 显示驱动
-│   │   │   └── ...               # HAL 外设初始化
-│   │   └── Inc/                  # 头文件
-│   ├── Middlewares/              # FreeRTOS 中间件
-│   └── freertos_chuankou.ioc    # STM32CubeMX 工程配置
-├── web/                          # Web 远程控制面板
-│   └── index.html                # 单页应用（MQTT + 响应式 UI）
-├── media/                        # 项目展示图片
-├── docs/                         # 项目文档
-│   ├── system-design.md          # 系统设计说明
-│   └── functional-requirements.md # 功能需求说明
-├── .gitignore
-└── README.md
-```
-
-## 硬件清单
-
-| 硬件 | 型号/规格 | 用途 |
-|------|-----------|------|
-| 上位机 | NVIDIA Jetson Orin NX | ROS2 运行、AI 推理（GPU 加速） |
-| 下位机 | STM32F103ZET6 | FreeRTOS 实时控制 |
-| 摄像头 | CSI 摄像头 x2 | 全局搜索 + 局部精准识别 |
-| 舵机驱动 | PCA9685（I2C） | 4 路舵机 PWM 生成 |
-| 舵机 | x4 | 机械臂各关节驱动 |
-| 姿态传感器 | MPU6050 | 机器人姿态检测 |
-| 电机 | 直流减速电机 x4 + 编码器 | 差速驱动底盘 |
-| OLED | 128x64（I2C） | 运行状态显示 |
-| 结构件 | 亚克力板 + 3D 打印件 | SolidWorks 自主设计 |
-
-## 快速开始
-
-### 环境要求
-
-- **上位机**：NVIDIA Jetson Orin NX，Ubuntu 20.04+，ROS2 Humble
-- **下位机**：STM32CubeIDE（编译固件）
-- **Python 依赖**：`ultralytics`, `opencv-python`, `pyserial`, `numpy`, `torch`
-
-### 编译与运行
+在仓库根目录运行，Python 环境需要 NumPy，串口 C 测试需要 GCC：
 
 ```bash
-# 1. 编译 ROS2 工作空间
-cd ~/robot_ws
-colcon build
-
-# 2. 加载环境
-source install/setup.bash
-
-# 3. 一键启动所有节点
-ros2 launch robot_launch start.py
+python -m pip install numpy
+python -m unittest discover -s tests -v
 ```
 
-### 下位机固件
+测试包含 300 组随机位姿的 FK/IK 往返校验、已知位姿、奇异腕姿态、关节限位、轨迹速度与加速度、连续目标确认，以及编译执行的固件串口分包测试。它们验证软件行为，不等同于真机验证。
 
-使用 STM32CubeIDE 打开 `firmware/freertos_chuankou.ioc`，生成 HAL 驱动后编译烧录。
+## ROS 2 构建与试运行
 
-### Web 控制面板
+在匹配 ROS 2 Humble 的环境中，将仓库放到工作空间 `src` 下，并安装声明的依赖：
 
-直接在浏览器中打开 `web/index.html`，配置 MQTT 服务器地址即可连接。
+```bash
+cd ~/robot_ws
+source /opt/ros/humble/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source install/setup.bash
+ros2 launch robot_launch arm.py
+```
 
-> **注意**：模型权重文件（`*.pt`）未包含在仓库中。如需运行视觉检测，请将训练好的 YOLOv5 权重放置到对应路径。
+默认六轴计算模式不打开串口。另一个已加载工作空间的终端可以发送：
+
+```bash
+ros2 service call /arm_control interfaces/srv/ArmControl "{type: fetch, x: 12.0, y: 0.0, z: 0.0, roll: 0.0, pitch: 180.0, yaw: 0.0, class_name: dry}"
+```
+
+完整视觉流程需要实际相机、模型及标定文件：
+
+```bash
+ros2 launch robot_launch start.py config:=/absolute/path/robot.yaml
+```
+
+真实运动前，按[部署指南](docs/deployment-guide.md)校准配置与固件，再开启串口。`ArmControl.srv` 新增姿态与分类字段，上下游必须重新构建。
+
+## TensorRT 导出与基准测试
+
+在目标 Jetson 上，用与训练模型相匹配的本地 YOLOv5 仓库：
+
+```bash
+python tools/export_tensorrt.py --weights /absolute/path/best.pt --yolov5-repo ~/yolov5
+python tools/benchmark_detection.py --model /absolute/path/best.engine --video /absolute/path/test.mp4 --yolov5-repo ~/yolov5 --frames 300
+```
+
+结果写入 `output/benchmark.json` 和 `output/benchmark.csv`，该测试不包括视频解码、ROS 通信与显示。实时链路帧率仍需在目标系统测量。具体环境和两种模型系列的区别见 [TensorRT 部署说明](docs/tensorrt-deployment.md)。
+
+## 目录
+
+| 路径 | 内容 |
+|---|---|
+| `robot_arm/robot_arm/` | 六轴 FK/IK、历史四轴 IK、轨迹与抓取服务 |
+| `robot_vision/robot_vision/` | 相机、YOLO 推理适配、平面标定定位 |
+| `robot_core/robot_core/` | 连续帧确认与异步抓取状态调度 |
+| `robot_serial/` | UART 发送服务 |
+| `robot_launch/config/robot.yaml` | 可配置参考参数 |
+| `interfaces/` | ROS 2 消息与服务 |
+| `firmware/` | STM32 下位机、串口解析与舵机执行 |
+| `tools/` | TensorRT 导出、基准测试与 ROS 集成检查 |
+| `tests/` | 软件与串口测试 |
+| `web/`、`media/` | Web 界面与原型展示素材 |
 
 ## 文档
 
-| 文档 | 说明 |
-|------|------|
-| [docs/system-design.md](docs/system-design.md) | 系统设计说明（架构、硬件、软件、算法详解） |
-| [docs/functional-requirements.md](docs/functional-requirements.md) | 功能需求说明（各模块功能定义） |
-| [docs/uart-protocol.md](docs/uart-protocol.md) | UART 串口通信协议（上下位机命令格式） |
-| [docs/deployment-guide.md](docs/deployment-guide.md) | 部署指南（环境配置、编译运行、固件烧录） |
+- [系统设计与坐标约定](docs/system-design.md)
+- [功能范围与验证状态](docs/functional-requirements.md)
+- [部署指南](docs/deployment-guide.md)
+- [UART 协议](docs/uart-protocol.md)
+- [TensorRT 部署与性能测量](docs/tensorrt-deployment.md)
 
 ## License
 
-本项目为竞赛与大学生创新训练项目作品，仅供学习参考。
+见 [LICENSE](LICENSE)。模型与外部推理框架遵循各自许可证。

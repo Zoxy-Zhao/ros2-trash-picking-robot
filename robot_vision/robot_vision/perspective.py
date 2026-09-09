@@ -1,3 +1,4 @@
+import os
 import cv2
 import numpy as np
 import time
@@ -37,10 +38,12 @@ class PerspectiveNode(Node):
         从.npy文件加载透视变换矩阵。
         """
         try:
-            self.transform_matrix = np.load(filename)
+            self.transform_matrix = np.load(os.path.expanduser(filename))
+            if self.transform_matrix.shape != (3, 3) or not np.all(np.isfinite(self.transform_matrix)) or np.linalg.matrix_rank(self.transform_matrix) < 3:
+                raise ValueError("Invalid homography matrix")
             print(f"透视变换矩阵已从 {filename} 加载")
         except Exception as e:
-            print(f"加载矩阵失败: {e}")
+            raise ValueError(f"加载矩阵失败: {e}") from e
 
     def transform_point(self, src_point, transform_matrix):
         """
@@ -52,6 +55,8 @@ class PerspectiveNode(Node):
         # 使用透视变换矩阵进行转换
         transformed_point = np.dot(transform_matrix, src_point_homogeneous)
 
+        if not np.all(np.isfinite(transformed_point)) or abs(transformed_point[2]) < 1e-10:
+            raise ValueError("Point at projective infinity")
         # 转换后的坐标需要归一化 (除以 w')
         x_prime = transformed_point[0] / transformed_point[2]
         y_prime = transformed_point[1] / transformed_point[2]
@@ -94,12 +99,14 @@ class PerspectiveTransforms:
         初始化 PerspectiveCalibration 类的实例。
         """
         self.transform_matrix = None
+        self.matrix_path = os.path.expanduser("~/robot_ws/src/robot_vision/data/matrix.npy")
 
     def save_transform_matrix(self, filename):
         """
         将透视变换矩阵保存为.npy文件。
         """
         if self.transform_matrix is not None:
+            os.makedirs(os.path.dirname(os.path.abspath(filename)), exist_ok=True)
             np.save(filename, self.transform_matrix)  # 将矩阵保存为.npy文件
             print(f"透视变换矩阵已保存为 {filename}")
         else:
@@ -245,7 +252,7 @@ if __name__ == "__main__":
         cv2.imshow("input", frame)
         keyCode = cv2.waitKey(30) & 0xFF
         # 按下esc暂停
-        if keyCode == "24":
+        if keyCode == 27:
             break
         # 使用时间来暂停
         # if time.time() - now_time > 3:

@@ -15,7 +15,7 @@ setup(
     zip_safe=True,
     maintainer='zxy',
     maintainer_email='zxy2016567076@gmail.com',
-    description='YOLO object detection and perspective-transform 3D localization',
+    description='YOLO object detection and calibrated planar localization',
     license='MIT',
     tests_require=['pytest'],
     entry_points={

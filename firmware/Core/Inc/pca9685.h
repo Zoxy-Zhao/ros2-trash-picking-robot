@@ -28,7 +28,7 @@ void pca_setfreq(float freq);
 void pca_setpwm(uint8_t num, uint32_t on, uint32_t off);
 void PCA_Servo_180(uint8_t num, float end_angle);
 void PCA_Servo_270(uint8_t num, float end_angle);
-void pca_set_duty_cycle(uint8_t channel, float duty_cycle);
+void set_pwm_duty_cycle(uint8_t channel, float duty_cycle);
 void PCA_Paw_Status(int status);
 
 #endif

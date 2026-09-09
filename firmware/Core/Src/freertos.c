@@ -28,6 +28,8 @@
 #include "queue.h"
 #include "event_groups.h"
 #include "message_buffer.h"
+#include "arm6_config.h"
+#include <math.h>
 #include "semphr.h"
 
 /* USER CODE END Includes */
@@ -241,7 +243,7 @@ void MX_FREERTOS_Init(void) {
 
   /* Create the queue(s) */
   /* creation of Queue_communication */
-  Queue_communicationHandle = osMessageQueueNew (36, 51, &Queue_communication_attributes);
+  Queue_communicationHandle = osMessageQueueNew (36, UART_FRAME_SIZE, &Queue_communication_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
 	/* add queues, ... */
@@ -316,7 +318,7 @@ void APPTask_contact(void *argument)
 {
   /* USER CODE BEGIN APPTask_contact */
 	//定义value字符串数组来存放由上位机存放的指�????????????????????????????????????????????????????????????????????
-	char value[50];
+	char value[UART_FRAME_SIZE];
 	/* Infinite loop */
 	for (;;) {
 
@@ -391,18 +393,27 @@ void APPTask_contact(void *argument)
 			Set_StopMode();
 		}
 
-		//如果指令是ARM
-		if (strcmp(res.command, STRING_ARM) == 0)
-		{
-			double value[4] = {res.params[0], res.params[1], res.params[2], res.params[3]};
-			xEventGroupSetBits(EventGroupHandle, BITMASK_ARM);
-			xMessageBufferSend(msgbuffer_ARM, value, sizeof(double) * 4, pdMS_TO_TICKS(100));
-		}
+        /* Six-axis commands cannot be interpreted as legacy ARM. */
+        if (strcmp(res.command, STRING_ARM) == 0 || strcmp(res.command, "ARM6") == 0) {
+            int count = strcmp(res.command, "ARM6") == 0 ? 6 : 4;
+            if (res.param_count != count || (count == 6 && !ARM6_ENABLED)) continue;
+            double arm_values[7] = {0};
+            int valid = 1;
+            for (int i = 0; i < count; ++i) {
+                arm_values[i] = res.params[i];
+                if (count == 6) {
+                    double servo = ARM6_ZERO_DEG[i] + ARM6_DIRECTION[i] * arm_values[i];
+                    if (!isfinite(servo) || servo < 0 || servo > ARM6_TRAVEL_DEG[i]) valid = 0;
+                }
+            }
+            if (!valid) continue;
+            arm_values[6] = count;
+            xMessageBufferSend(msgbuffer_ARM, arm_values, sizeof(arm_values), pdMS_TO_TICKS(100));
+        }
 
 		//如果指令是CLAW
-		if(strcmp(res.command, STRING_CLAW) == 0)
+		if(strcmp(res.command, STRING_CLAW) == 0 && res.param_count == 1 && (res.params[0] == 0 || res.params[0] == 1))
 		{
-			xEventGroupSetBits(EventGroupHandle, BITMASK_CLAW);
 			xMessageBufferSend(msgbuffer_CLAW, &res.params[0], sizeof(double), pdMS_TO_TICKS(20));
 		}
 
@@ -603,19 +614,22 @@ void APPTask_controls(void *argument)
 void APPTask_arm(void *argument)
 {
   /* USER CODE BEGIN APPTask_arm */
-	double value[4];
-  /* Infinite loop */
-  for(;;)
-  {
-	  xEventGroupWaitBits(EventGroupHandle, BITMASK_ARM, pdTRUE, pdTRUE, portMAX_DELAY);
-	  xMessageBufferReceive(msgbuffer_ARM, value, sizeof(double) * 4, pdMS_TO_TICKS(100));
-	  printf("[接收成功] Values: %.2f, %.2f, %.2f, %.2f\n",value[0], value[1], value[2], value[3]);
-	  PCA_Servo_270(0, value[0]);
-	  PCA_Servo_180(1, value[1]);
-	  PCA_Servo_180(2, value[2]);
-	  PCA_Servo_180(3, value[3]);
-	  vTaskDelay(pdMS_TO_TICKS(10));
-  }
+    double value[7];
+    for (;;) {
+        if (xMessageBufferReceive(msgbuffer_ARM, value, sizeof(value), portMAX_DELAY) != sizeof(value)) continue;
+        if (value[6] == 6 && ARM6_ENABLED) {
+            for (int i = 0; i < 6; ++i) {
+                double servo = ARM6_ZERO_DEG[i] + ARM6_DIRECTION[i] * value[i];
+                set_pwm_duty_cycle(ARM6_CHANNELS[i], (float)(2.5 + 10.0 * servo / ARM6_TRAVEL_DEG[i]));
+            }
+        } else if (value[6] == 4) {
+            PCA_Servo_270(0, value[0]);
+            PCA_Servo_180(1, value[1]);
+            PCA_Servo_180(2, value[2]);
+            PCA_Servo_180(3, value[3]);
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
   /* USER CODE END APPTask_arm */
 }
 
@@ -633,8 +647,7 @@ void APPTask_claw(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	  xEventGroupWaitBits(EventGroupHandle, BITMASK_CLAW, pdTRUE, pdTRUE, portMAX_DELAY);
-	  xMessageBufferReceive(msgbuffer_CLAW, &value, sizeof(double), pdMS_TO_TICKS(20));
+	  if (xMessageBufferReceive(msgbuffer_CLAW, &value, sizeof(double), portMAX_DELAY) != sizeof(double)) continue;
 //	  printf("claw ok  :%d\n",(int)value);
 	  if(value == 1){
 		  PCA_Servo_180(5, 90);

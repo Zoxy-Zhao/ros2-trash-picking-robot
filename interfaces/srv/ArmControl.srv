@@ -1,7 +1,14 @@
+# Position in base frame, cm; fixed-axis RPY in degrees (Rz Ry Rx).
 string type
 float32 x
 float32 y
 float32 z
+# Legacy field, ignored; use roll/pitch/yaw.
 float32 angle
+float32 roll
+float32 pitch
+float32 yaw
+string class_name
 ---
+# Command sequence completed, not proof of physical grasp success.
 bool success

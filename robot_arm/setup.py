@@ -15,7 +15,7 @@ setup(
     zip_safe=True,
     maintainer='zxy',
     maintainer_email='zxy2016567076@gmail.com',
-    description='4-DOF robotic arm inverse kinematics and grasping control',
+    description='Six-axis analytic IK and grasp planning with legacy four-axis support',
     license='MIT',
     tests_require=['pytest'],
     entry_points={

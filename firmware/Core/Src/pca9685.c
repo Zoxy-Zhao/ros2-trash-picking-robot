@@ -1,6 +1,7 @@
 #include "pca9685.h"
 #include "math.h"
 #include "i2c.h"
+#include "arm6_config.h"
 
 uint8_t pca_read(uint8_t startAddress)
 {
@@ -74,6 +75,18 @@ void PCA_Servo_Init(void)
 	pca_write(pca_mode1, 0x0);
 	pca_setfreq(50);
 	HAL_Delay(500);
+	if (ARM6_ENABLED) {
+		for (int i = 0; i < 6; ++i) {
+			double angle = ARM6_ZERO_DEG[i] + ARM6_DIRECTION[i] * ARM6_HOME_DEG[i];
+			if (!isfinite(angle) || angle < 0 || angle > ARM6_TRAVEL_DEG[i]) return;
+		}
+		for (int i = 0; i < 6; ++i) {
+			double angle = ARM6_ZERO_DEG[i] + ARM6_DIRECTION[i] * ARM6_HOME_DEG[i];
+			set_pwm_duty_cycle(ARM6_CHANNELS[i], (float)(2.5 + 10.0 * angle / ARM6_TRAVEL_DEG[i]));
+		}
+		PCA_Servo_180(5, 90);
+		return;
+	}
 	PCA_Servo_270(0, 0);
 	PCA_Servo_180(1, 115);
 	PCA_Servo_180(2, -50);
