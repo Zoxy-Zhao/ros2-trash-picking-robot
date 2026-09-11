@@ -1,86 +1,78 @@
-# 净境先锋 - 基于 ROS 2 的智能垃圾拾取机器人
+# 净境先锋 · 基于 ROS 2 的智能垃圾拾取机器人
 
-面向办公与公共空间的垃圾识别、视觉定位、机械臂抓取与分类投放项目，采用 **Jetson Orin NX + STM32F103ZET6** 主从架构，结合 ROS 2、YOLOv5、几何逆运动学、关节轨迹和 UART 控制；Web 端通过 MQTT 提供远程交互。
+面向办公与公共空间的视觉识别、目标定位、机械臂抓取与分类投放项目。采用 **Jetson Orin NX + STM32** 协同架构，集成 ROS 2、YOLOv5 / TensorRT、六轴几何运动学、关节轨迹与 UART 控制，配套 Web MQTT 交互界面。
 
-**项目背景**：大学生物联网应用创新设计竞赛 / 大学生创新训练项目。
+**当前展示：连续目标确认 → 基座坐标转换 → 六轴 FK/IK → 多阶段分类抓放 → 五次插值 → UART 指令 → 固件解析验证。**
 
-仓库提供六轴运动学与抓取控制、YOLOv5 / TensorRT 推理接口、部署工具和自动化测试，同时兼容四轴样机。连杆尺寸、关节限位与分类桶位置由配置文件统一管理。
+## 一分钟运行软件演示
 
-<p align="center">
-  <img src="media/robot-photo-1.jpg" width="380" alt="原四轴样机实物图"/>
-  <img src="media/robot-photo-2.jpg" width="380" alt="原四轴样机实物图"/>
-</p>
+```bash
+python -m pip install -r showcase/requirements.txt
+python -m showcase.demo
+```
 
-## 运动控制与视觉执行链
+打开生成的 `output/showcase/demo.html`，可播放或拖动 TCP 路径，查看六关节角、独立夹爪、阶段切换和整数角度编码误差。JSON 保存输入来源、完整配置、目标确认记录、轨迹及串口指令。
+
+有主机 GCC 时，加上实际固件解析验证：
+
+```bash
+python -m showcase.demo --firmware-check
+```
+
+这会编译 `firmware/Core/Src/transmit.c`，将整条命令流按 7 字节分片送入模拟 HAL，检查实际 C 解析结果与发送内容逐帧一致。默认不连接物理串口、不运行电机任务。
+
+<details><summary>展开交互报告预览</summary>
+
+![净境先锋六轴抓放软件演示](media/software-demo.png)
+
+</details>
+
+演示目标、连续检测帧和标定矩阵均为标注的合成样例；六轴尺寸、限位和桶位为可替换的软件示例。数学位姿、指令估计和实测反馈分别处理，不把模拟成功当作实物抓取成绩。
+
+## 当前能力与入口
+
+| 能力 | 实现 | 入口 |
+|---|---|---|
+| 系统集成 | ROS 2 异步服务协调检测、定位和抓取；Jetson / STM32 通过 UART 分工 | [任务调度](robot_core/robot_core/confirm.py)、[机械臂服务](robot_arm/robot_arm/arm_control.py) |
+| 六轴 FK/IK | Z-Y-Y 定位臂 + Z-Y-Z 球腕，枚举多解、限位过滤、FK 复核及种子选解 | [运动学](robot_arm/robot_arm/six_axis.py) |
+| 视觉定位与确认 | 类别/位置一致性、重复与乱序帧过滤、单应变换及基座平面坐标 | [目标确认](robot_core/robot_core/target_gate.py)、[坐标几何](robot_vision/robot_vision/plane_geometry.py) |
+| 分类抓放 | 接近、抓取、提升、转运、投放、离桶、回位；夹爪独立 | [共用规划器](robot_arm/robot_arm/grasp_plan.py) |
+| 轨迹与执行 | 同步五次关节插值，按速度/加速度约束定时；ARM6 编码 | [轨迹](robot_arm/robot_arm/move_joints.py)、[软件执行链](showcase/pipeline.py) |
+| UART / MCU | CRLF 帧、DMA 分片重组、指令解析、独立夹爪通道 | [解析器](firmware/Core/Src/transmit.c)、[通道配置](firmware/Core/Inc/arm6_config.h) |
+| TensorRT 部署 | YOLOv5 FP16 引擎导出、模型加载、视频逐帧性能统计 | [导出](tools/export_tensorrt.py)、[测量](tools/benchmark_detection.py) |
+| Web 交互 | MQTT 状态订阅与控制发布 | [控制界面](web/index.html) |
 
 ```mermaid
 flowchart LR
-    A[CSI 图像采集] --> B[YOLOv5 / TensorRT 检测]
-    B --> C[连续新帧与目标一致性确认]
-    C --> D[标定平面坐标转换]
-    D --> E[六轴几何 IK / 可达性判断]
-    E --> F[接近、抓取、抬升、分类投放]
-    F --> G[关节五次插值]
-    G --> H[ARM6 / UART]
-    H --> I[STM32 / PCA9685]
+    A[检测框与时间戳] --> B[连续新帧确认]
+    B --> C[标定平面与基座坐标]
+    C --> D[六轴 IK / 路径预检]
+    D --> E[同步五次插值]
+    E --> F[ARM6 与独立 CLAW]
+    F --> G[模拟接收 / 实际 C 解析验证]
 ```
 
-### 六轴几何逆运动学与可达性
+[能力与简历对应](docs/capability-map.md) · [软件测试结果](docs/software-validation.md) · [模型与坐标约定](docs/system-design.md) · [UART 协议](docs/uart-protocol.md)
 
-- `six_axis.py`：针对 **Z-Y-Y 定位臂 + Z-Y-Z 球形腕**，进行腕心分离、肩部和肘部几何求解、腕部姿态分解。
-- 枚举肩部、肘部与腕部候选解，检查关节限位，以 FK 复核目标位姿，并按相对当前指令位置的关节行程选解。
-- 腕部奇异时尝试保留种子关节角，并检查限位端点；不可达目标返回失败。
-- 几何尺寸、关节限位、待机姿态、分类桶位置均可配置。**不适用于任意六轴构型，也不包含碰撞检测。**
-- 保留 `ik_service.py` 四轴原型求解器，`arm_dof: 4` 可选择历史模式。
-
-### 轨迹与抓取调度
-
-- 四／六关节同步五次插值，按最大速度与加速度确定轨迹时长。
-- 抓取前检查所有路径点的 IK；执行接近、夹取、抬升、分类投放、返回流程。
-- ROS 2 异步服务协调检测暂停、坐标转换、抓取与恢复，避免嵌套执行器等待。
-- `ARM` 与 `ARM6` 独立编码；六轴使用 PCA9685 通道 0、1、2、3、4、6，通道 5 留给夹爪。
-- 默认 `dry_run: true`：计算路径与命令，不驱动硬件。UART 写入成功仅代表发送完成，不代表关节到位或抓取成功。
-
-### 视觉定位与 TensorRT 部署
-
-- 支持原版 YOLOv5 的 `.pt` / `.engine` 模型；另提供 Ultralytics 模型适配器，按训练框架显式选择。
-- 检测线程消费最新图像，每张图像最多处理一次，保留相机时间戳；连续目标确认检查类别和空间一致性。
-- 透视标定输出基座平面 X/Y，Z 由抓取平面高度配置，不将平面单应性描述为通用深度重建。
-- 提供 FP16 TensorRT 导出与视频基准测试脚本，记录实际平均吞吐率、P95/P99 延迟和逐帧 CSV。
-- 权重、TensorRT 引擎和标定矩阵需自行提供；性能报告由基准测试工具生成。
-
-## 软件与硬件
-
-| 层级 | 组件 / 状态 |
-|---|---|
-| 上位机 | Jetson Orin NX，ROS 2 Humble；实际系统需匹配 JetPack、CUDA、TensorRT |
-| 下位机 | STM32F103ZET6、FreeRTOS、PCA9685、UART 115200 bps |
-| 六轴控制 | Z-Y-Y 定位臂 + Z-Y-Z 球形腕；连杆、零位、方向和限位可配置 |
-| 原型硬件 | 四轴机械臂、夹爪、差速底盘、升降机构、CSI 摄像头 |
-| Web | MQTT 状态订阅与控制发布；完整机器人端 MQTT 桥接尚未包含 |
-| 换桶 | 固件有升降换桶动作；自主导航至换桶站、满溢感知闭环仍需集成验证 |
-
-<p align="center">
-  <img src="media/web-home.png" width="600" alt="Web 控制中心"/>
-</p>
-
-## 无硬件测试
-
-在仓库根目录运行，Python 环境需要 NumPy，串口 C 测试需要 GCC：
+## 测试与故障演示
 
 ```bash
-python -m pip install numpy
 python -m unittest discover -s tests -v
+python -m showcase.demo --fault unreachable
+python -m showcase.demo --fault stale
+python -m showcase.demo --fault transport
+python -m showcase.demo --fault estop
 ```
 
-测试包含 300 组随机位姿的 FK/IK 往返校验、已知位姿、奇异腕姿态、关节限位、轨迹速度与加速度、连续目标确认，以及编译执行的固件串口分包测试。GitHub Actions 同时执行 ROS 2 Humble 构建与服务接口集成检查。
+本机 **24 项测试全部通过**，包含 300 组随机位姿往返、奇异腕、多解限位、轨迹速度/加速度、目标确认和固件解析。正常样例生成 **139 个运动样本、142 个 UART 帧**；故障演示明确锁存退出，返回码 2。正常返回码 0。
 
-## ROS 2 构建与试运行
+ROS 服务与离线演示共用 `grasp_plan.py`；ROS 定位服务与离线演示共用 `plane_geometry.py`。GitHub Actions 执行软件测试、生成演示 artifact，并单独执行 ROS 2 Humble 构建与服务集成检查。
 
-在匹配 ROS 2 Humble 的环境中，将仓库放到工作空间 `src` 下，并安装声明的依赖：
+## ROS 2 运行
+
+在匹配 ROS 2 Humble 的工作空间中：
 
 ```bash
-cd ~/robot_ws
 source /opt/ros/humble/setup.bash
 rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install
@@ -88,54 +80,31 @@ source install/setup.bash
 ros2 launch robot_launch arm.py
 ```
 
-默认六轴计算模式不打开串口。另一个已加载工作空间的终端可以发送：
+默认 `dry_run: true`，计算路径和命令。另一个加载环境的终端可发送：
 
 ```bash
 ros2 service call /arm_control interfaces/srv/ArmControl "{type: fetch, x: 12.0, y: 0.0, z: 0.0, roll: 0.0, pitch: 180.0, yaw: 0.0, class_name: dry}"
 ```
 
-完整视觉流程需要实际相机、模型及标定文件：
+连接真实硬件前配置机构尺寸、零位、限位、桶位与相机标定，并使六轴接收端映射一致。细节见 [部署指南](docs/deployment-guide.md)。
 
-```bash
-ros2 launch robot_launch start.py config:=/absolute/path/robot.yaml
-```
+## YOLOv5 / TensorRT
 
-真实运动前，按[部署指南](docs/deployment-guide.md)校准配置与固件，再开启串口。`ArmControl.srv` 新增姿态与分类字段，上下游必须重新构建。
-
-## TensorRT 导出与基准测试
-
-在目标 Jetson 上，用与训练模型相匹配的本地 YOLOv5 仓库：
+检测支持原版 YOLOv5 `.pt` / `.engine`，也提供按模型系列显式选择的 Ultralytics 适配器。实际权重与引擎需自行提供。
 
 ```bash
 python tools/export_tensorrt.py --weights /absolute/path/best.pt --yolov5-repo ~/yolov5
 python tools/benchmark_detection.py --model /absolute/path/best.engine --video /absolute/path/test.mp4 --yolov5-repo ~/yolov5 --frames 300
 ```
 
-结果写入 `output/benchmark.json` 和 `output/benchmark.csv`，该测试不包括视频解码、ROS 通信与显示。实时链路帧率仍需在目标系统测量。具体环境和两种模型系列的区别见 [TensorRT 部署说明](docs/tensorrt-deployment.md)。
+在目标 Jetson 上导出并测量，输出模型摘要、环境、FPS、P95/P99 延迟和逐帧 CSV。软件演示不运行 YOLO、不生成性能成绩。部署方法与测量口径见 [TensorRT 说明](docs/tensorrt-deployment.md)。
 
-## 目录
+## 实现范围
 
-| 路径 | 内容 |
-|---|---|
-| `robot_arm/robot_arm/` | 六轴 FK/IK、历史四轴 IK、轨迹与抓取服务 |
-| `robot_vision/robot_vision/` | 相机、YOLO 推理适配、平面标定定位 |
-| `robot_core/robot_core/` | 连续帧确认与异步抓取状态调度 |
-| `robot_serial/` | UART 发送服务 |
-| `robot_launch/config/robot.yaml` | 默认运行参数 |
-| `interfaces/` | ROS 2 消息与服务 |
-| `firmware/` | STM32 下位机、串口解析与舵机执行 |
-| `tools/` | TensorRT 导出、基准测试与 ROS 集成检查 |
-| `tests/` | 软件与串口测试 |
-| `web/`、`media/` | Web 界面与原型展示素材 |
+六轴软件模型为特定球腕构型，夹爪不计入六运动关节。提供路径点可达性与关节插值，尚未验证机械碰撞、真实位置跟踪与抓取效果。UART 发送或 C 解析成功不代表舵机到位；模拟急停也不等同于固件硬件急停。
 
-## 文档
+Web MQTT 界面可发布/订阅，完整机器人端桥接需接入部署系统；升降换桶机构代码位于 `firmware/Core/Src/lift.c`，自主换桶导航与满溢感知不在当前完整验证链路中。
 
-- [系统设计与坐标约定](docs/system-design.md)
-- [功能范围与验证状态](docs/functional-requirements.md)
-- [部署指南](docs/deployment-guide.md)
-- [UART 协议](docs/uart-protocol.md)
-- [TensorRT 部署与性能测量](docs/tensorrt-deployment.md)
+## 许可
 
-## License
-
-见 [LICENSE](LICENSE)。模型与外部推理框架遵循各自许可证。
+见 [LICENSE](LICENSE)。外部模型和框架遵循各自许可证。

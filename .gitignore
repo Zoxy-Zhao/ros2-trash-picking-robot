@@ -59,3 +59,7 @@ docs/code-review-issues.md
 *.zip
 *.rar
 *.7z
+
+# Generated demo reports, private PDFs and local QA files
+/output/
+/tmp/

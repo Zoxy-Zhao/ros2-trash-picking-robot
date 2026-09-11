@@ -5,13 +5,20 @@ import math
 class TargetGate:
     def __init__(self, frames=11, confidence=0.7, max_shift=40.):
         self.frames, self.confidence, self.max_shift = frames, confidence, max_shift
+        self.last_stamp_ns = None
         self.reset()
 
     def reset(self):
         self.previous = None
         self.count = 0
 
-    def update(self, boxes):
+    def update(self, boxes, stamp_ns=None):
+        if stamp_ns is not None:
+            if type(stamp_ns) is not int or stamp_ns <= 0:
+                return None
+            if self.last_stamp_ns is not None and stamp_ns <= self.last_stamp_ns:
+                return None
+            self.last_stamp_ns = stamp_ns
         candidates = [b for b in boxes if b.confidence > self.confidence
                       and b.xmax > b.xmin and b.ymax > b.ymin]
         if not candidates:

@@ -1,0 +1,10 @@
+{
+  "source": "SYNTHETIC sample detection frames and identity homography; not detector output or measured camera calibration",
+  "homography": [[1,0,0],[0,1,0],[0,0,1]],
+  "pixel_center": [480.0,435.36842105263156],
+  "class_name": "dry",
+  "confidence": 0.93,
+  "frames": 11,
+  "frame_interval_ns": 33333333,
+  "confirmation_frames": 11
+}

@@ -16,10 +16,10 @@ class Confirm:
         node.declare_parameter('grasp_timeout_sec', 120.)
         self.timer = node.create_timer(0.05, self.tick)
 
-    def confirm_flush(self, boxes):
+    def confirm_flush(self, boxes, stamp_ns=None):
         if self.stage != 'idle':
             return
-        box = self.gate.update(boxes)
+        box = self.gate.update(boxes, stamp_ns)
         if box is None:
             return
         services = (self.client.arm_control, self.client.enable_detection, self.client.perspective_server)

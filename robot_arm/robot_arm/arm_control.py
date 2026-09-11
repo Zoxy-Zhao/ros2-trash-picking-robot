@@ -10,6 +10,7 @@ from interfaces.srv import ArmControl, SendString
 from robot_arm.move_joints import MoveJoints
 from robot_arm.ik_service import IKService
 from robot_arm.six_axis import Geometry, SixAxisIK, rpy_matrix
+from robot_arm.grasp_plan import plan_grasp
 
 
 class ArmControlNode(Node):
@@ -76,18 +77,20 @@ class ArmControlNode(Node):
             raise ValueError('Invalid motion timing/clearance parameters')
         if target.shape != (3,) or bin_point.shape != (3,) or not np.all(np.isfinite([target, bin_point])):
             raise ValueError('Invalid target/bin coordinates')
-        above = target + [0., 0., height]
-        bin_above = bin_point + [0., 0., height]
-        plan = []
-        seed = self.theta_now
-        for point in [above, target, above, bin_above, bin_point, bin_above]:
-            joints = (self.ik_server.solve(point, rotation, seed) if self.dof == 6
-                      else self.ik_server.ik_solution(*point))
-            if joints is None or not np.all(np.isfinite(joints)):
-                raise ValueError(f'Unreachable waypoint: {point.tolist()}')
-            plan.append(joints)
-            seed = joints
-        plan.append(self.home.copy())
+        if self.dof == 6:
+            phases = plan_grasp(self.ik_server, target, rotation, bin_point, self.home,
+                                self.theta_now, height)
+            plan = [phase.joints for phase in phases]
+        else:
+            above = target + [0., 0., height]
+            bin_above = bin_point + [0., 0., height]
+            plan = []
+            for point in [above, target, above, bin_above, bin_point, bin_above]:
+                joints = self.ik_server.ik_solution(*point)
+                if joints is None or not np.all(np.isfinite(joints)):
+                    raise ValueError(f'Unreachable waypoint: {point.tolist()}')
+                plan.append(joints)
+            plan.append(self.home.copy())
         # Every waypoint must solve before opening the gripper or moving.
         if not self.uart_send('CLAW 0'):
             return False

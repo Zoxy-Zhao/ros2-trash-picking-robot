@@ -1,4 +1,4 @@
-# Default six-axis configuration. Configure geometry, limits and bin locations
+# SOFTWARE EXAMPLE six-axis configuration. Configure geometry, limits and bin locations
 # for the installed arm before enabling physical outputs.
 arm_control:
   ros__parameters:

@@ -49,7 +49,7 @@ class DetectionSubscriber(Node):
                     f"  尺寸: {box.xmax - box.xmin}x{box.ymax - box.ymin} 像素"
                 )
             
-            self.confirm.confirm_flush(msg.boxes)
+            self.confirm.confirm_flush(msg.boxes, header.stamp.sec * 1_000_000_000 + header.stamp.nanosec)
 
         except Exception as e:
             self.get_logger().error(f"处理检测结果时出错: {str(e)}")
